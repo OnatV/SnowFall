@@ -25,7 +25,7 @@ last updated Nov 4th 2023
     - contains "step" method that updates the simulation
     - contains kernels used for sph
 
-## To-Do:
+## To-Do/Next Steps:
 - implement smoothing kernel for SPH 
 - calculate pressure and viscosity forces (to behave more like a fluid)
 
@@ -36,5 +36,5 @@ for theory:
 
 
 for implementation inspiration:
-https://github.com/erizmr/SPH_Taichi/tree/master
-
+- https://github.com/erizmr/SPH_Taichi/tree/master
+- https://github.com/pmocz/sph-python/blob/master/sph.py
