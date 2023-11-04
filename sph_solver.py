@@ -25,17 +25,17 @@ class SnowSolver:
             if self.ps.position[i].x > self.ps.domain_end[2]:
                 self.ps.position[i].x = self.ps.domain_end[2]
 
-    @ti.kernel
-    def cubic_kernel(self, r_norm):
-        # use ps.smoothing_radius to calculate the kernel weight of particles
-        # for now, sum over nearby particles
-        pass
+    # @ti.kernel
+    # def cubic_kernel(self, r_norm):
+    #     # use ps.smoothing_radius to calculate the kernel weight of particles
+    #     # for now, sum over nearby particles
+    #     pass
     
-    @ti.kernel
-    def cubic_kernel_derivative(self, r_norm)
-        # use ps.smoothing_radius to calculate the derivative of kernel weight of particles
-        # for now, sum over nearby particles
-        pass
+    # @ti.kernel
+    # def cubic_kernel_derivative(self, r_norm):
+    #     # use ps.smoothing_radius to calculate the derivative of kernel weight of particles
+    #     # for now, sum over nearby particles
+    #     pass
 
     @ti.kernel
     def calculate_acceleration(self, deltaTime: float):
