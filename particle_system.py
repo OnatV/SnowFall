@@ -14,7 +14,7 @@ class ParticleSystem:
         self.particle_radius = 0.01 # move to config
         self.dim = 3 # 3D simulation
         self.smooth_radius = 1.0
-
+        self.gravity = ti.Vector(self.cfg.gravity)
         # allocate memory
         self.allocate_fields()
         self.initialize_fields()
@@ -25,6 +25,7 @@ class ParticleSystem:
         self.scene = ti.ui.Scene()
         self.camera = ti.ui.Camera()
         self.camera.position(-7.5, 2.5, 2.5)
+        self.initalize_domain_viz()
 
     def allocate_fields(self):
         self.acceleration = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
@@ -53,35 +54,36 @@ class ParticleSystem:
         self.canvas.scene(self.scene)
         self.window.show()
 
-    def draw_domain(self):
-        vertices = ti.Vector.field(self.dim, dtype=float, shape=8)
-        vertices[0].xyz = self.domain_origin[0], self.domain_origin[1], self.domain_origin[2]
-        vertices[1].xyz = self.domain_origin[0], self.domain_origin[1], self.domain_end[2]
-        vertices[2].xyz = self.domain_end[0], self.domain_origin[1], self.domain_end[2]
-        vertices[3].xyz = self.domain_end[0], self.domain_origin[1], self.domain_origin[2]
+    def initalize_domain_viz(self):
+        self.vertices = ti.Vector.field(self.dim, dtype=float, shape=8)
+        self.vertices[0].xyz = self.domain_origin[0], self.domain_origin[1], self.domain_origin[2]
+        self.vertices[1].xyz = self.domain_origin[0], self.domain_origin[1], self.domain_end[2]
+        self.vertices[2].xyz = self.domain_end[0], self.domain_origin[1], self.domain_end[2]
+        self.vertices[3].xyz = self.domain_end[0], self.domain_origin[1], self.domain_origin[2]
 
-        vertices[4].xyz = self.domain_origin[0], self.domain_end[1], self.domain_origin[2]
-        vertices[5].xyz = self.domain_origin[0], self.domain_end[1], self.domain_end[2]
-        vertices[6].xyz = self.domain_end[0], self.domain_end[1], self.domain_end[2]
-        vertices[7].xyz = self.domain_end[0], self.domain_end[1], self.domain_origin[2]
+        self.vertices[4].xyz = self.domain_origin[0], self.domain_end[1], self.domain_origin[2]
+        self.vertices[5].xyz = self.domain_origin[0], self.domain_end[1], self.domain_end[2]
+        self.vertices[6].xyz = self.domain_end[0], self.domain_end[1], self.domain_end[2]
+        self.vertices[7].xyz = self.domain_end[0], self.domain_end[1], self.domain_origin[2]
         
-        indices = ti.Vector.field(2, dtype=int, shape=12)
-        indices[0].xy = 0, 1
-        indices[1].xy = 1, 2
-        indices[2].xy = 2, 3
-        indices[3].xy = 3, 0        
+        self.indices = ti.Vector.field(2, dtype=int, shape=12)
+        self.indices[0].xy = 0, 1
+        self.indices[1].xy = 1, 2
+        self.indices[2].xy = 2, 3
+        self.indices[3].xy = 3, 0        
 
-        indices[4].xy = 4, 5
-        indices[5].xy = 5, 6
-        indices[6].xy = 6, 7
-        indices[7].xy = 7, 4
+        self.indices[4].xy = 4, 5
+        self.indices[5].xy = 5, 6
+        self.indices[6].xy = 6, 7
+        self.indices[7].xy = 7, 4
 
-        indices[8].xy = 0, 4
-        indices[9].xy = 1, 5
-        indices[10].xy = 2, 6
-        indices[11].xy = 3, 7
+        self.indices[8].xy = 0, 4
+        self.indices[9].xy = 1, 5
+        self.indices[10].xy = 2, 6
+        self.indices[11].xy = 3, 7
 
-        self.scene.lines(vertices=vertices, indices=indices, width=1.0)
+    def draw_domain(self):
+        self.scene.lines(vertices=self.vertices, indices=self.indices, width=1.0)
 
     def draw_particles(self):
         self.scene.particles(self.position, color = (0.99, 0.99, 0.99), radius = 0.1)
