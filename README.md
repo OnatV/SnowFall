@@ -1,7 +1,7 @@
 # SnowFall
 - Run via
     ```
-    python -m scripts.ball_and_cloth
+    python main.py
     ```
 
 ## Current Progress
