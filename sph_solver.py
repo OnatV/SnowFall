@@ -25,17 +25,43 @@ class SnowSolver:
             if self.ps.position[i].x > self.ps.domain_end[2]:
                 self.ps.position[i].x = self.ps.domain_end[2]
 
-    # @ti.kernel
-    # def cubic_kernel(self, r_norm):
-    #     # use ps.smoothing_radius to calculate the kernel weight of particles
-    #     # for now, sum over nearby particles
-    #     pass
+    @ti.func
+    def cubic_kernel(self, r_norm:):
+        # implementation details borrowed from SPH_Taichi
+        # use ps.smoothing_radius to calculate the kernel weight of particles
+        # for now, sum over nearby particles
+        w = ti.cast(0.0, ti.f32)
+        h = self.ps.smoothing_radius
+        k = 8 / np.pi
+        k /= ti.pow(h, self.ps.dim)
+        q = r_norm / h
+        if q <= 1.0:
+            if q <= 0.5:
+                q2 = ti.pow(q, 2)
+                q3 = ti.pow(q, 3)
+                w = k * (6.0 * q3 - 6.0 * q2 + 1)
+            else:
+                w = k * 2 * ti.pow(1 - q, 3.0)
+        return w
     
-    # @ti.kernel
-    # def cubic_kernel_derivative(self, r_norm):
-    #     # use ps.smoothing_radius to calculate the derivative of kernel weight of particles
-    #     # for now, sum over nearby particles
-    #     pass
+    @ti.func    
+    def cubic_kernel_derivative(self, r):
+        # use ps.smoothing_radius to calculate the derivative of kernel weight of particles
+        # for now, sum over nearby particles
+        h = self.ps.smoothing_radius
+        k = 8 / np.pi
+        k = 6.0 * k / ti.pow(h, self.ps.dim)
+        r_norm = r.norm()
+        q = r_norm / h
+        d_w = ti.Vector([0.0, 0.0, 0.0])
+        if r_norm > 1e-5 and q <= 1.0:
+            grad_q = r / (r_norm * h)
+            if q < 0.5:
+                d_w = k * q * (3.0 * q - 2.0) * grad_q
+            else:
+                f = 1.0 - q
+                d_w = l * (-f * f) * grad_q
+        return d_w
 
     @ti.kernel
     def calculate_acceleration(self, deltaTime: float):

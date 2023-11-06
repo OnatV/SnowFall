@@ -15,6 +15,9 @@ class ParticleSystem:
         self.dim = 3 # 3D simulation
         self.smooth_radius = 1.0
         self.gravity = ti.Vector(self.cfg.gravity)
+        self.temperature = -10.0 # degrees Celsuis
+
+
         # allocate memory
         self.allocate_fields()
         self.initialize_fields()
@@ -86,6 +89,6 @@ class ParticleSystem:
         self.scene.lines(vertices=self.vertices, indices=self.indices, width=1.0)
 
     def draw_particles(self):
-        self.scene.particles(self.position, color = (0.99, 0.99, 0.99), radius = 0.1)
+        self.scene.particles(self.position, color = (0.99, 0.99, 0.99), radius = 0.01)
 
 
