@@ -25,9 +25,31 @@ last updated Nov 4th 2023
     - contains "step" method that updates the simulation
     - contains kernels used for sph
 
+### Psuedocode for Simulation Step:
+![algorithm_outline](images/algorithm_outline.png)
+
+**from Gissler et al paper (An Implicit Compressible SPH Solver for Snow Simulation)**
+pseudocode for a single simulation step in SPH snow solver:
+```
+foreach particle i do: (see self.compute_internal_forces)
+    compute p_{0,i}^t (pressure force at time t, Section 3.3.2)
+    compute L_t (correction matrix, Eq 15 in paper)
+    compute a_{i}^{other,t} (acceleration due to gravity, adhesion, and ext forces)
+    compute a_{i}^{friction,t} (accerleration due to friction and boundary, eq 24)
+solve for a_i^lambda
+solve for a_i^G
+foreach particle i do
+    integrate velocity v
+foreach particle i do 
+    integrate and store deformation gradient F
+foreach particle i do
+    integrate positison x (see self.update_position)
+```
+This pseudocode is already layed out in [SnowSolver.substep](sph_solver.py)
 ## To-Do/Next Steps:
-- implement smoothing kernel for SPH 
-- calculate pressure and viscosity forces (to behave more like a fluid)
+- ~~implement smoothing kernel for SPH~~
+- implement minimal target
+    - 
 
 ## Sources
 for theory:
