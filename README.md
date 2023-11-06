@@ -12,6 +12,18 @@ for now, the snow particles can fall and collide with the floor of the domain. T
 
 last updated Nov 4th 2023
 
+### Milestones
+1. ~~Set up programming environment (including choice of language + libraries) (Oct 31 - Nov 7)~~
+2. ~~Create simple render + viewport to enable visual debugging (Oct 31 - Nov 7)~~
+3. Implement SPH to support minimal target (Nov 7th - 21st) 
+4. Show compression of snow due to cube (Nov 21st - Nov 28th)
+Midterm Presentation (28th Nov)
+5. Implement adhesion and friction with cube (Nov 28th - Dec 5th)
+6. Physics working with arbitrary mesh (Dec 5th - Dec 12th)
+7. Rendering + Performance (Dec 12th - Dec 19th)
+Deadline (Dec 19th)
+
+
 ## Architecture:
 - **main.py**: entry point for program.
     - creates/reads configuration for simulation
