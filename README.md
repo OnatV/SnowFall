@@ -49,7 +49,16 @@ This pseudocode is already layed out in [SnowSolver.substep](sph_solver.py)
 ## To-Do/Next Steps:
 - ~~implement smoothing kernel for SPH~~
 - implement minimal target
-    - 
+    - compute pressure
+    - compute correction matrix
+    - compute a_other (ignoring boundary effects)
+    - solver for elastic deformation
+        - solve a^lambda
+        - solve a_G
+    - integrate deformation gradient
+- implement desired target
+    - compute full a_other term
+    - compute a_friction
 
 ## Sources
 for theory:
