@@ -13,9 +13,10 @@ class ParticleSystem:
         self.domain_end = self.domain_origin + self.domain_size
         self.particle_radius = 0.01 # move to config
         self.dim = 3 # 3D simulation
-        self.smooth_radius = 1.0
         self.gravity = ti.Vector(self.cfg.gravity)
         self.temperature = -10.0 # degrees Celsuis
+        self.m_k = 0.08 * (self.particle_radius ** self.dim) # particle mass
+        self.smoothing_radius = self.particle_radius * 4.0
 
 
         # allocate memory
@@ -89,6 +90,6 @@ class ParticleSystem:
         self.scene.lines(vertices=self.vertices, indices=self.indices, width=1.0)
 
     def draw_particles(self):
-        self.scene.particles(self.position, color = (0.99, 0.99, 0.99), radius = 0.01)
+        self.scene.particles(self.position, color = (0.99, 0.99, 0.99), radius = self.particle_radius)
 
 

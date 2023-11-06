@@ -8,6 +8,10 @@ class SnowSolver:
     def __init__(self, ps: ParticleSystem):
         self.ps = ps
         self.time = 0
+        self.snow_implemented = False
+        # self.a_lambda = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        # self.a_G = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        # self.a_other = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
 
     @ti.kernel
     def enforce_boundary_3D(self):
@@ -26,7 +30,7 @@ class SnowSolver:
                 self.ps.position[i].x = self.ps.domain_end[2]
 
     @ti.func
-    def cubic_kernel(self, r_norm:):
+    def cubic_kernel(self, r_norm):
         # implementation details borrowed from SPH_Taichi
         # use ps.smoothing_radius to calculate the kernel weight of particles
         # for now, sum over nearby particles
@@ -64,16 +68,13 @@ class SnowSolver:
         return d_w
 
     @ti.kernel
-    def calculate_acceleration(self, deltaTime: float):
-        # f = ma
-        # a = f / m
-        # aggregate acceleration caused by gravity, pressure from nearby particles, and external forces
-        # right now, only supports gravity
+    def simple_gravity_accel(self):
+        #   simple gravity acceleration
         for i in range(self.ps.num_particles):
             self.ps.acceleration[i] = self.ps.gravity
 
     @ti.kernel
-    def calculate_velocity(self, deltaTime: float):
+    def integrate_velocity(self, deltaTime: float):
         for i in range(self.ps.num_particles):
             self.ps.velocity[i] = self.ps.velocity[i] + (deltaTime * self.ps.acceleration[i])
 
@@ -82,9 +83,64 @@ class SnowSolver:
         for i in range(self.ps.num_particles):
             self.ps.position[i] = self.ps.position[i] + deltaTime * self.ps.velocity[i]
 
+    @ti.func
+    def compute_pressure(self, i):
+        pass
+
+    @ti.func
+    def compute_correction_matrix(self, i):
+        pass
+
+    @ti.func
+    def compute_accel_ext(self, i):
+        pass
+
+    @ti.func
+    def compute_accel_friction(self, i):
+        pass
+
+    @ti.kernel
+    def compute_internal_forces(self, deltaTime:float):
+        for i in range(self.ps.num_particles):
+            self.compute_pressure(i)
+            self.compute_correction_matrix(i)
+            self.compute_accel_ext(i)
+            self.compute_accel_friction(i)
+
+    @ti.kernel
+    def integrate_deformation_gradient(self, deltaTime:float):
+        pass
+    
+
+
     def substep(self, deltaTime):
-        self.calculate_acceleration(deltaTime)
-        self.calculate_velocity(deltaTime)
+        # from Gissler et al paper (An Implicit Compressible SPH Solver for Snow Simulation)
+        # pseudocode for a single simulation step in SPH snow solver:
+        # 
+        # foreach particle i do: (see self.compute_internal_forces)
+        #   compute p_{0,i}^t (pressure force at time t, Section 3.3.2)
+        #   compute L_t (correction matrix, Eq 15 in paper)
+        #   compute a_{i}^{other,t} (acceleration due to gravity, adhesion, and ext forces)
+        #   compute a_{i}^{friction,t} (accerleration due to friction and boundary, eq 24)
+        # solve for a_i^lambda (acceleration due to elastic deformation, subsection 3.2.1) (see self.solve_a_lambda)
+        # solve for a_i^G (acceleration due to elastic deformation, subsection 3.2.2) (see self.solve_a_G)
+        # foreach particle i do (see self.integrate_velocity)
+        #   integrate velocity v
+        # foreach particle i do (see self.integrate_deformation_gradient)
+        #   integrate and store deformation gradient F, Subsection 3.3.1
+        # foreach particle i do
+        #   integrate positison x (see self.update_position)
+        if self.snow_implemented:
+            # these functions should update the acceleration field of the particles
+            self.compute_internal_forces()
+            self.solve_a_lambda()
+            self.solve_a_G()
+            self.integrate_velocity(deltaTime)
+            self.integrate_deformation_gradient(deltaTime)
+        else:
+            self.simple_gravity_accel()
+            self.integrate_velocity(deltaTime)
+        # these last steps are the same regardless of solver type
         self.update_position(deltaTime)
 
     def step(self, deltaTime):
