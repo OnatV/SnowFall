@@ -85,7 +85,7 @@ class SnowSolver:
             self.ps.position[i] = self.ps.position[i] + deltaTime * self.ps.velocity[i]
 
     @ti.func
-    def compute_pressure(self, i):
+    def compute_rest_density(self, i):
         pass
 
     @ti.func
@@ -115,7 +115,7 @@ class SnowSolver:
     @ti.kernel
     def compute_internal_forces(self, deltaTime:float):
         for i in range(self.ps.num_particles):
-            self.compute_pressure(i)
+            self.compute_rest_density(i)
             self.compute_correction_matrix(i)
             self.compute_accel_ext(i)
             self.compute_accel_friction(i)

@@ -35,10 +35,14 @@ class ParticleSystem:
         self.acceleration = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.velocity = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.density = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        self.rest_density = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.position = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.position_0 = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.pressure = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
-        
+        self.deformation_gradient = ti.Matrix.field(n=3, m=3, dtype=float, shape=self.num_particles) # an num_particles length array of 3x3 matrices
+        self.lambda_t_i = ti.field(dtype=float, shape=self.num_particles) # Lame' parameters
+        self.G_t_i = ti.field(dtype=float, shape=self.num_particles) # Lame' parameters
+
     @ti.kernel
     def initialize_fields(self):
         print("initilizing particle positions...")
