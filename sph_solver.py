@@ -65,7 +65,7 @@ class SnowSolver:
                 d_w = k * q * (3.0 * q - 2.0) * grad_q
             else:
                 f = 1.0 - q
-                d_w = l * (-f * f) * grad_q
+                d_w = k * (-f * f) * grad_q
         return d_w
 
     @ti.kernel
@@ -142,6 +142,7 @@ class SnowSolver:
         #   integrate and store deformation gradient F, Subsection 3.3.1
         # foreach particle i do
         #   integrate positison x (see self.update_position)
+        # self.ps.gravity = set to zero
         if self.snow_implemented:
             # these functions should update the acceleration field of the particles
             self.compute_internal_forces()
