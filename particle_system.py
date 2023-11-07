@@ -17,7 +17,7 @@ class ParticleSystem:
         self.temperature = -10.0 # degrees Celsuis
         self.m_k = 0.08 * (self.particle_radius ** self.dim) # particle mass
         self.smoothing_radius = self.particle_radius * 4.0
-
+        self.wind_direction = ti.Vector(self.cfg.wind_direction)
 
         # allocate memory
         self.allocate_fields()

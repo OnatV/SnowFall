@@ -12,6 +12,7 @@ class SnowSolver:
         # self.a_lambda = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         # self.a_G = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         # self.a_other = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        self.wind_enabled = True
 
     @ti.kernel
     def enforce_boundary_3D(self):
@@ -72,7 +73,7 @@ class SnowSolver:
         #   simple gravity acceleration
         for i in range(self.ps.num_particles):
             self.ps.acceleration[i] = self.ps.gravity
-
+    
     @ti.kernel
     def integrate_velocity(self, deltaTime: float):
         for i in range(self.ps.num_particles):
@@ -90,14 +91,26 @@ class SnowSolver:
     @ti.func
     def compute_correction_matrix(self, i):
         pass
+    
+    @ti.func
+    def compute_accel_ext(self, i):        
+
+        ##Strength equal to the position of the particle in the direction
+        flow_strength = self.ps.position[i].dot(self.ps.wind_direction)
+        self.ps.acceleration[i] = self.ps.gravity + self.ps.wind_direction * flow_strength
 
     @ti.func
-    def compute_accel_ext(self, i):
+    def compute_flow(self, i):
         pass
 
     @ti.func
     def compute_accel_friction(self, i):
         pass
+
+    @ti.kernel
+    def compute_external_forces_only(self, deltaTime:float):
+        for i in range(self.ps.num_particles):
+            self.compute_accel_ext(i)
 
     @ti.kernel
     def compute_internal_forces(self, deltaTime:float):
@@ -111,7 +124,6 @@ class SnowSolver:
     def integrate_deformation_gradient(self, deltaTime:float):
         pass
     
-
 
     def substep(self, deltaTime):
         # from Gissler et al paper (An Implicit Compressible SPH Solver for Snow Simulation)
@@ -137,6 +149,11 @@ class SnowSolver:
             self.solve_a_G()
             self.integrate_velocity(deltaTime)
             self.integrate_deformation_gradient(deltaTime)
+
+        elif self.wind_enabled:
+            self.compute_external_forces_only(deltaTime)
+            self.integrate_velocity(deltaTime)
+
         else:
             self.simple_gravity_accel()
             self.integrate_velocity(deltaTime)

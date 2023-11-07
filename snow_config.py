@@ -7,6 +7,7 @@ class SnowConfig:
     def __init__(self,
         num_particles: int = 1000000,
         gravity: np.array = np.array([0.0, -9.81, 0.0]),
+        wind_direction : np.array = np.array([0.0, 0.0, -1.0]),
         domain_size: np.array = np.array([5.0, 5.0, 5.0]), # domain lower corner is at 0,0,0
         deltaTime = 0.001
     ) -> None:
@@ -14,3 +15,4 @@ class SnowConfig:
         self.gravity = gravity
         self.domain_size = domain_size
         self.deltaTime = 0.01
+        self.wind_direction = wind_direction
