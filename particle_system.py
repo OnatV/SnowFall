@@ -38,7 +38,7 @@ class ParticleSystem:
         self.position = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.position_0 = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.pressure = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
-
+        
     @ti.kernel
     def initialize_fields(self):
         print("initilizing particle positions...")

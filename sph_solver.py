@@ -130,7 +130,7 @@ class SnowSolver:
         # pseudocode for a single simulation step in SPH snow solver:
         # 
         # foreach particle i do: (see self.compute_internal_forces)
-        #   compute p_{0,i}^t (pressure force at time t, Section 3.3.2)
+        #   compute p_{0,i}^t (rest density at time t, Section 3.3.2)
         #   compute L_t (correction matrix, Eq 15 in paper)
         #   compute a_{i}^{other,t} (acceleration due to gravity, adhesion, and ext forces)
         #   compute a_{i}^{friction,t} (accerleration due to friction and boundary, eq 24)
