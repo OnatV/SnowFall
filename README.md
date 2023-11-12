@@ -81,9 +81,10 @@ This pseudocode is already layed out in [SnowSolver.substep](sph_solver.py)
 ## Sources
 for theory:
 - https://sph-tutorial.physics-simulation.org/
-- https://matthias-research.github.io/pages/publications/sca03.pdf  
+- https://matthias-research.github.io/pages/publications/sca03.pdf 
 
 
 for implementation inspiration:
 - https://github.com/erizmr/SPH_Taichi/tree/master
 - https://github.com/pmocz/sph-python/blob/master/sph.py
+- https://github.com/InteractiveComputerGraphics/SPlisHSPlasH
