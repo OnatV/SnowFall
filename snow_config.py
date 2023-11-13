@@ -5,7 +5,7 @@ import numpy as np
 # see https://github.com/erizmr/SPH_Taichi/blob/master/config_builder.py for similar approach
 class SnowConfig:
     def __init__(self,
-        num_particles: int = 1000000,
+        num_particles: int = 10000,
         gravity: np.array = np.array([0.0, -9.81, 0.0]),
         wind_direction : np.array = np.array([0.0, 0.0, -1.0]),
         domain_size: np.array = np.array([5.0, 5.0, 5.0]), # domain lower corner is at 0,0,0

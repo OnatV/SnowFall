@@ -8,11 +8,43 @@ class SnowSolver:
     def __init__(self, ps: ParticleSystem):
         self.ps = ps
         self.time = 0
-        self.snow_implemented = False
+        self.snow_implemented = True
         # self.a_lambda = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         # self.a_G = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         # self.a_other = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.wind_enabled = True
+        self.init_kernel_lookup()
+
+    def init_kernel_lookup(self, table_size = 100):
+        self.kernel_table = ti.field(dtype=float, shape=table_size)
+        dh = self.ps.smoothing_radius / table_size
+        @ti.kernel
+        def set_values(): 
+            for i in range(table_size):
+                r = i * dh
+                self.kernel_table[i] = self.cubic_kernel(r)
+        set_values()
+    
+    # gives an approixmation self.of W(r), r = |xj - xi|
+    # given the table of precomputed values
+    # interpolation is.. nearest neighbor
+    # assume r_norm >= 0
+    @ti.func
+    def kernel_lookup(self, r_norm):
+        tsize = self.kernel_table.shape[0]
+        h = self.ps.smoothing_radius
+        dh = h / tsize
+        result = ti.f32(0.0)
+        if (r_norm >= h):
+            result = 0
+        else:
+            i = ti.i32(ti.floor(r_norm / dh))
+            result = self.kernel_table[i]
+        return result
+    # kernel_table[i] is W(i*dh)
+    # W(r_rnorm) is needed
+    # -> rnorm = i*dh
+    # rnorm / dh == i
 
     @ti.kernel
     def enforce_boundary_3D(self):
@@ -86,7 +118,22 @@ class SnowSolver:
 
     @ti.func
     def compute_rest_density(self, i):
-        pass
+        # first the density is computed, then
+        # the rest density is derived
+        # this will be slow as long as there is no neighborhood search
+        x_i = self.ps.position[i]
+        self.ps.density[i] = 0
+        # neighboorhood = get_neighborhood(x_i)
+        for j in range(self.ps.num_particles):
+            w_ij = self.kernel_lookup(ti.Vector.norm(x_i - self.ps.position[j]))
+            self.ps.density[i] += self.ps.m_k * w_ij
+
+        # it is unclear to me whether F has to be from timestep t+1
+        # or if the one from t is fine.
+        detF = ti.Matrix.determinant(self.ps.deformation_gradient[i])
+        self.ps.rest_density[i] = self.ps.density[i] * ti.abs(detF)
+        
+        
 
     @ti.func
     def compute_correction_matrix(self, i):
@@ -113,7 +160,7 @@ class SnowSolver:
             self.compute_accel_ext(i)
 
     @ti.kernel
-    def compute_internal_forces(self, deltaTime:float):
+    def compute_internal_forces(self):
         for i in range(self.ps.num_particles):
             self.compute_rest_density(i)
             self.compute_correction_matrix(i)
@@ -146,8 +193,8 @@ class SnowSolver:
         if self.snow_implemented:
             # these functions should update the acceleration field of the particles
             self.compute_internal_forces()
-            self.solve_a_lambda()
-            self.solve_a_G()
+            #self.solve_a_lambda()
+            #self.solve_a_G()
             self.integrate_velocity(deltaTime)
             self.integrate_deformation_gradient(deltaTime)
 
