@@ -52,6 +52,16 @@ class ParticleSystem:
         self.grid_new = ti.field(dtype=int, shape=(self.grid_size, self.max_particles_per_cell))   ##Holds the indices of partices at grid points
         self.grid_num_particles = ti.field(dtype=int, shape=(self.grid_size))  ##Holds the number of particles at each grid point
         self.particle_to_grid = ti.field(dtype=int, shape=self.num_particles)        ##Holds the grid point index of each particle, currently not needed because we
+        self.theta_clamp_c = ti.Matrix([
+            [1 - self.cfg.theta_c, 0, 0],
+            [0, 1 - self.cfg.theta_c, 0],
+            [0, 0, 1 - self.cfg.theta_c]
+        ], dtype=float)
+        self.theta_clamp_s =ti.Matrix([
+            [1 + self.cfg.theta_s, 0, 0],
+            [0, 1 + self.cfg.theta_s, 0],
+            [0, 0, 1 + self.cfg.theta_s]
+        ], dtype=float)
 
     @ti.kernel
     def initialize_fields(self):
@@ -100,7 +110,7 @@ class ParticleSystem:
         return int(x_ + y_ * self.grid_size + z_ * self.grid_size * self.grid_size)
     
     @ti.func
-    def for_all_negihbours(self, i, func):
+    def for_all_negihbours(self, i, func : ti.template(), ret : ti.template()):
         '''
             Only iterates over 1 neighbours of grid cell i to find the points in the neighbourhood..
             A slow function because:, 
@@ -114,7 +124,9 @@ class ParticleSystem:
             if max(0, current_grid) == 0 : continue
             if self.num_grid_cells - 1 == min(self.num_grid_cells - 1, current_grid) : continue
             for j in range(self.grid_num_particles[current_grid]):
-                func(i, self.grid[current_grid, j])
+                p_j = self.grid[current_grid, j] #Get point idx
+                if i!= j and self.position[i].distance(self.position[p_j]) < self.smoothing_radius:
+                    func(i, p_j, ret)
 
 
     def visualize(self):
