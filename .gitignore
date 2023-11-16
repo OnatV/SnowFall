@@ -162,3 +162,7 @@ cython_debug/
 # generated profiling files
 profiling/
 *.prof
+
+# IDE
+
+.vscode/

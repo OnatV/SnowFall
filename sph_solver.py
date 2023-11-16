@@ -167,7 +167,7 @@ class SnowSolver:
     #calculate V_i = m_i / density_i
     @ti.func
     def get_volume(self, i):
-        return ti.cast(self.ps.m_k / self.ps.density[i], dtype=ti.f32)
+        return (self.ps.m_k / self.ps.density[i])[0]
 
 
 
@@ -180,9 +180,9 @@ class SnowSolver:
         for j in range(self.ps.num_particles):
             x_ij = x_i - self.ps.position[j] # x_ij: vec3
             w_ij = self.grad_kernel_lookup(x_ij)
-            v_j = ti.Matrix.diag(3, self.get_volume(j))
-            
-            tmp_i +=  v_j @ w_ij.outer_product(x_ij)
+            v_j = self.get_volume(j)
+
+            tmp_i += (v_j * w_ij).outer_product(x_ij)
 
         det = ti.Matrix.determinant(tmp_i)
         if det != 0: 
