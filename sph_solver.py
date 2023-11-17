@@ -228,7 +228,23 @@ class SnowSolver:
 
     @ti.kernel
     def integrate_deformation_gradient(self, deltaTime:float):
-        pass
+        
+        for i in range(self.ps.num_particles):
+            self.ps.deformation_gradient[i] = self.ps.deformation_gradient[i] + deltaTime * self.ps.velocity[i]
+            self.ps.deformation_gradient[i] = self.clamp_deformation_gradients(self.ps.deformation_gradient[i])
+
+
+
+    @ti.func
+    def clamp_deformation_gradients(self, matrix):
+
+
+        U, S, V = ti.svd(matrix)
+        S = ti.math.clamp(S, self.ps.theta_clamp_c, self.ps.theta_clamp_s)
+        return V @ S @ V.transpose() ## This supposedly removes the rotation part
+
+
+
     
 
     def substep(self, deltaTime):

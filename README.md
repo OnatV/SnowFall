@@ -67,8 +67,8 @@ This pseudocode is already layed out in [SnowSolver.substep](sph_solver.py)
     - solver for elastic deformation - Jackson
         - solve a^lambda
         - solve a_G
-    - integrate deformation gradient - Onat
-    - Grid for performance - Onat
+    - ~~integrate deformation gradient - Onat~~
+    - Grid for performance - Onat -> Partly done ???
     - fixing the camera lookat - Jackson
 - implement desired target
     - compute full a_other term
