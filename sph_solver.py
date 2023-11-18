@@ -169,16 +169,19 @@ class SnowSolver:
     def get_volume(self, i):
         return (self.ps.m_k / self.ps.density[i])[0]
 
-
-    
-    @ti.kernel
-    def implicit_solver_prepare():
-        #compute sph discretization using eq 6
-        
-
     @ti.func
-    def solve_a_lambda(self):
+    def discretization(self, i, k, sum:ti.template()):
+        sum += self.get_volume(k) * (self.ps.velocity[k] - self.ps.velocity[i]) * self.cubic_kernel_derivative(self.ps.position[i]-self.ps.position[k])
+            
+    @ti.kernel
+    def implicit_solver_prepare(self):
+        #compute sph discretization using eq 6
+        for i in range(self.ps.num_particles):
+            velocity_div = ti.Vector([0.0, 0.0, 0.0])
+            self.ps.for_all_negihbours(i, self.discretization, velocity_div)
 
+    def solve_a_lambda(self):
+        self.implicit_solver_prepare()
 
     @ti.func
     def compute_correction_matrix(self, i):
@@ -237,10 +240,10 @@ class SnowSolver:
 
     @ti.kernel
     def integrate_deformation_gradient(self, deltaTime:float):
-        
-        for i in range(self.ps.num_particles):
-            self.ps.deformation_gradient[i] = self.ps.deformation_gradient[i] + deltaTime * self.ps.velocity[i]
-            self.ps.deformation_gradient[i] = self.clamp_deformation_gradients(self.ps.deformation_gradient[i])
+        pass
+        # for i in range(self.ps.num_particles):
+        #     self.ps.deformation_gradient[i] = self.ps.deformation_gradient[i] + deltaTime * self.ps.velocity[i]
+        #     self.ps.deformation_gradient[i] = self.clamp_deformation_gradients(self.ps.deformation_gradient[i])
 
 
 
