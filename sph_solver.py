@@ -132,8 +132,15 @@ class SnowSolver:
         # or if the one from t is fine.
         detF = ti.Matrix.determinant(self.ps.deformation_gradient[i])
         self.ps.rest_density[i] = self.ps.density[i] * ti.abs(detF)
+    
+    @ti.kernel
+    def implicit_solver_prepare():
+        #compute sph discretization using eq 6
         
-        
+
+    @ti.func
+    def solve_a_lambda(self):
+
 
     @ti.func
     def compute_correction_matrix(self, i):
@@ -193,7 +200,7 @@ class SnowSolver:
         if self.snow_implemented:
             # these functions should update the acceleration field of the particles
             self.compute_internal_forces()
-            #self.solve_a_lambda()
+            self.solve_a_lambda()
             #self.solve_a_G()
             self.integrate_velocity(deltaTime)
             self.integrate_deformation_gradient(deltaTime)
