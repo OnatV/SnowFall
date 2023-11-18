@@ -1,7 +1,16 @@
 import taichi as ti
 import numpy as np
 
+from taichi.math import vec2, vec3, mat3
 from particle_system import ParticleSystem
+
+@ti.func
+def mult_scalar_matrix(c:float, A: mat3 ):
+    res = ti.Matrix.zero(float, 3, 3)
+    for i in range(3):
+        for j in range(3):
+            res[i, j] = c * A[i, j]
+    return res
 
 @ti.data_oriented
 class SnowSolver:
@@ -15,14 +24,20 @@ class SnowSolver:
         self.wind_enabled = True
         self.init_kernel_lookup()
 
-    def init_kernel_lookup(self, table_size = 100):
+    def init_kernel_lookup(self, table_size = 100, grad_table_size = 100):
         self.kernel_table = ti.field(dtype=float, shape=table_size)
+        self.grad_kernel_table = ti.Vector.field(dtype=float, n=3, shape=grad_table_size)
         dh = self.ps.smoothing_radius / table_size
+        grad_dh = self.ps.smoothing_radius / table_size
         @ti.kernel
         def set_values(): 
             for i in range(table_size):
                 r = i * dh
-                self.kernel_table[i] = self.cubic_kernel(r)
+                self.kernel_table[i] = self.cubic_kernel(r) 
+            for i in range(table_size):
+                r = i * grad_dh
+                tmp = self.cubic_kernel_derivative(ti.Vector([r, 0.0, 0.0]))
+                self.grad_kernel_table[i] = tmp.x
         set_values()
     
     # gives an approixmation self.of W(r), r = |xj - xi|
@@ -45,6 +60,22 @@ class SnowSolver:
     # W(r_rnorm) is needed
     # -> rnorm = i*dh
     # rnorm / dh == i
+
+    @ti.func
+    def grad_kernel_lookup(self, r:vec3) -> vec3:
+        r_norm = r.norm()
+        tsize = self.kernel_table.shape[0]
+        h = self.ps.smoothing_radius
+        dh = h / tsize
+        result = vec3(0.0, 0.0, 0.0)
+        if (r_norm >= h):
+            pass
+        else:
+            i = ti.i32(ti.floor(r_norm / dh))
+            grad_magnitude = self.grad_kernel_table[i]
+            grad_dir = r / r_norm
+            result = grad_magnitude * grad_dir
+        return result
 
     @ti.kernel
     def enforce_boundary_3D(self):
@@ -82,7 +113,7 @@ class SnowSolver:
         return w
     
     @ti.func    
-    def cubic_kernel_derivative(self, r):
+    def cubic_kernel_derivative(self, r:vec3) -> vec3:
         # use ps.smoothing_radius to calculate the derivative of kernel weight of particles
         # for now, sum over nearby particles
         h = self.ps.smoothing_radius
@@ -132,6 +163,13 @@ class SnowSolver:
         # or if the one from t is fine.
         detF = ti.Matrix.determinant(self.ps.deformation_gradient[i])
         self.ps.rest_density[i] = self.ps.density[i] * ti.abs(detF)
+        
+    #calculate V_i = m_i / density_i
+    @ti.func
+    def get_volume(self, i):
+        return (self.ps.m_k / self.ps.density[i])[0]
+
+
     
     @ti.kernel
     def implicit_solver_prepare():
@@ -144,8 +182,31 @@ class SnowSolver:
 
     @ti.func
     def compute_correction_matrix(self, i):
-        pass
-    
+        x_i = self.ps.position[i]
+        self.ps.is_pseudo_L_i[i] = False
+        tmp_i = ti.Matrix.zero(dt=float, n=3, m=3)
+        # this should be only particles in the neighborhood
+        for j in range(self.ps.num_particles):
+            x_ij = x_i - self.ps.position[j] # x_ij: vec3
+            w_ij = self.grad_kernel_lookup(x_ij)
+            v_j = self.get_volume(j)
+
+            tmp_i += (v_j * w_ij).outer_product(x_ij)
+
+        det = ti.Matrix.determinant(tmp_i)
+        if det != 0: 
+            self.ps.correction_matrix[i] = tmp_i.inverse()
+        else: # no inverse 
+              # hence use the peudoinverse
+              # other code can use is_pseudo property
+              # if true, the kernel_grad Wij must be transformed to 
+              # tmp_i.transpose() * W_ij, and then
+              # ~grad = pseudo_inv * tmp_i.transpose() * W_ij
+            pseudo = (tmp_i.transpose() * tmp_i).inverse()
+            self.ps.pseudo_correction_matrix[i] = pseudo
+            self.ps.correction_matrix[i] = tmp_i
+            self.ps.is_pseudo_L_i[i] = True
+
     @ti.func
     def compute_accel_ext(self, i):        
 
@@ -176,7 +237,23 @@ class SnowSolver:
 
     @ti.kernel
     def integrate_deformation_gradient(self, deltaTime:float):
-        pass
+        
+        for i in range(self.ps.num_particles):
+            self.ps.deformation_gradient[i] = self.ps.deformation_gradient[i] + deltaTime * self.ps.velocity[i]
+            self.ps.deformation_gradient[i] = self.clamp_deformation_gradients(self.ps.deformation_gradient[i])
+
+
+
+    @ti.func
+    def clamp_deformation_gradients(self, matrix):
+
+
+        U, S, V = ti.svd(matrix)
+        S = ti.math.clamp(S, self.ps.theta_clamp_c, self.ps.theta_clamp_s)
+        return V @ S @ V.transpose() ## This supposedly removes the rotation part
+
+
+
     
 
     def substep(self, deltaTime):
