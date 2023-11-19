@@ -153,7 +153,7 @@ class SnowSolver:
         # the rest density is derived
         # this will be slow as long as there is no neighborhood search
         x_i = self.ps.position[i]
-        self.ps.density[i] = 0
+        self.ps.density[i] = 0.0
         # neighboorhood = get_neighborhood(x_i)
         for j in range(self.ps.num_particles):
             w_ij = self.kernel_lookup(ti.Vector.norm(x_i - self.ps.position[j]))
@@ -171,17 +171,26 @@ class SnowSolver:
 
     @ti.func
     def discretization(self, i, k, sum:ti.template()):
-        sum += self.get_volume(k) * (self.ps.velocity[k] - self.ps.velocity[i]) * self.cubic_kernel_derivative(self.ps.position[i]-self.ps.position[k])
-            
+        sum += self.get_volume(k) * (self.ps.velocity[k] - self.ps.velocity[i]).dot(self.cubic_kernel_derivative(self.ps.position[i]-self.ps.position[k]))
+        # sum += 0.1
+        
+
     @ti.kernel
-    def implicit_solver_prepare(self):
+    def implicit_solver_prepare(self, deltaTime: float):
         #compute sph discretization using eq 6
         for i in range(self.ps.num_particles):
-            velocity_div = ti.Vector([0.0, 0.0, 0.0])
-            self.ps.for_all_negihbours(i, self.discretization, velocity_div)
+            self.ps.p_star[i] = 0
+            velocity_div = 0.0
+            # self.ps.for_all_negihbours(i, self.discretization, velocity_div)
+            for j in range(self.ps.num_particles):
+                if j == i: continue
+                self.discretization(i, j, velocity_div)
+            self.ps.p_star[i] = self.ps.density[i] - deltaTime * self.ps.density[i] * velocity_div
+            
 
-    def solve_a_lambda(self):
-        self.implicit_solver_prepare()
+    def solve_a_lambda(self, deltaTime):
+        self.implicit_solver_prepare(deltaTime)
+        # pass
 
     @ti.func
     def compute_correction_matrix(self, i):
@@ -211,8 +220,7 @@ class SnowSolver:
             self.ps.is_pseudo_L_i[i] = True
 
     @ti.func
-    def compute_accel_ext(self, i):        
-
+    def compute_accel_ext(self, i):
         ##Strength equal to the position of the particle in the direction
         flow_strength = self.ps.position[i].dot(self.ps.wind_direction)
         self.ps.acceleration[i] = self.ps.gravity + self.ps.wind_direction * flow_strength
@@ -280,7 +288,7 @@ class SnowSolver:
         if self.snow_implemented:
             # these functions should update the acceleration field of the particles
             self.compute_internal_forces()
-            self.solve_a_lambda()
+            self.solve_a_lambda(deltaTime)
             #self.solve_a_G()
             self.integrate_velocity(deltaTime)
             self.integrate_deformation_gradient(deltaTime)

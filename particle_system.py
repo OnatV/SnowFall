@@ -40,6 +40,7 @@ class ParticleSystem:
         self.acceleration = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.velocity = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.density = ti.Vector.field(1, dtype=float, shape=self.num_particles)
+        self.p_star = ti.Vector.field(1, dtype=float, shape=self.num_particles)
         self.rest_density = ti.Vector.field(1, dtype=float, shape=self.num_particles)
         self.position = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.position_0 = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
@@ -50,7 +51,6 @@ class ParticleSystem:
         self.is_pseudo_L_i = ti.field(dtype=bool, shape=self.num_particles)
         self.lambda_t_i = ti.field(dtype=float, shape=self.num_particles) # Lame' parameters
         self.G_t_i = ti.field(dtype=float, shape=self.num_particles) # Lame' parameters
-        self.p_star = ti.Vector.field(1, dtype=float, shape=self.num_particles)
         self.jacobian_diagonal = ti.Vector.field(1, dtype=float, shape=self.num_particles)
 
         self.grid = ti.field(dtype=int, shape=(self.grid_size, self.max_particles_per_cell))   ##Holds the indices of partices at grid points
@@ -136,29 +136,15 @@ class ParticleSystem:
         for x,y,z in ti.ndrange((-1,2),(-1,2),(-1,2)):
             current_grid = grid_idx + self.convert_grid_ix(x,y,z)
             if max(0, current_grid) == 0 : continue
-            if self.num_grid_cells - 1 == min(self.num_grid_cells - 1, current_grid) : continue
+            # if self.num_grid_cells - 1 == min(self.num_grid_cells - 1, current_grid) : continue
+            if current_grid < 0: continue
+            if current_grid >= self.num_grid_cells: continue
             for j in range(self.grid_num_particles[current_grid]):
                 p_j = self.grid[current_grid, j] # Get point idx
-                if i!= j and (self.position[i] - self.position[p_j]).norm() < self.smoothing_radius:
+                if p_j > self.num_particles or p_j < 0: continue
+                if i != j and (self.position[i] - self.position[p_j]).norm() < self.smoothing_radius:
                     func(i, p_j, ret)
-    
-    # def sum_all_negihbours(self, i, func : ti.template(), ret : ti.template()):
-    #     '''
-    #         Only iterates over 1 neighbours of grid cell i to find the points in the neighbourhood..
-    #         A slow function because:, 
-    #             -can't be parallelized.
-    #             -if checks are not static.
-    #     '''
-    #     grid_idx = self.to_grid_idx(i)
-    #     ###Iterate over all neighbours of grid cell i
-    #     for x,y,z in ti.ndrange((-1,2),(-1,2),(-1,2)):
-    #         current_grid = grid_idx + self.convert_grid_ix(x,y,z)
-    #         if max(0, current_grid) == 0 : continue
-    #         if self.num_grid_cells - 1 == min(self.num_grid_cells - 1, current_grid) : continue
-    #         for j in range(self.grid_num_particles[current_grid]):
-    #             p_j = self.grid[current_grid, j] # Get point idx
-    #             if i!= j and self.position[i].distance(self.position[p_j]) < self.smoothing_radius:
-    #                 func(i, p_j, ret)
+
 
     # @ti.func
     # def find_neighbors_as_list(self, i):

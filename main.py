@@ -5,8 +5,15 @@ from utils import *
 from particle_system import ParticleSystem
 from sph_solver import SnowSolver
 
+import argparse
+
+
+
 if __name__ =='__main__':
-    ti.init()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--debug', action='store_true')
+    args = parser.parse_args()
+    ti.init(debug=args.debug)
     print_about()
     cfg = SnowConfig()
     ps = ParticleSystem(cfg)
