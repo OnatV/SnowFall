@@ -76,13 +76,16 @@ class ParticleSystem:
             x = 4 * ti.random(dtype=float) + 0.5
             y = 4 * ti.random(dtype=float) + 0.5
             z = 4 * ti.random(dtype=float) + 0.5
-            self.position[i] = ti.Vector([x, y, z]) 
+            self.position[i] = ti.Vector([x, y, z])
+        self.update_grid
+        print("Intialized!")
 
     @ti.kernel
     def update_grid(self):
         ##First remove all particles from grid
         for i in range(self.num_grid_cells):
             self.grid_num_particles[i] = 0
+
 
         for i in range(self.num_particles):   
             grid_idx = self.to_grid_idx(i)

@@ -173,20 +173,50 @@ class SnowSolver:
     def discretization(self, i, k, sum:ti.template()):
         sum += self.get_volume(k) * (self.ps.velocity[k] - self.ps.velocity[i]).dot(self.cubic_kernel_derivative(self.ps.position[i]-self.ps.position[k]))
         # sum += 0.1
+
+    @ti.func
+    def helper_volume_squared_sum(self, i, j, sum: ti.template()):
+        sum += self.get_volume(i) * self.get_volume(j) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[j]).norm()
+    
+    @ti.func
+    def helper_sum_over_j(self, i, j, sum:ti.template()):
+        sum += self.get_volume(j) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[j]).norm()
+
+    @ti.func
+    def helper_sum_over_b(self, i, b, sum:ti.template()):
+        sum += self.get_volume(b) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[b]).norm()
+
+    @ti.func
+    def helper_sum_over_k(self, i, k, sum:ti.template()):
+        sum += self.get_volume(k) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[k]).norm()
         
+    @ti.func
+    def compute_jacobian_diagonal_entry(self, i, deltaTime):
+        psi = 1.5 # this is a parameter that was set in the paper
+        p_lame =  -self.ps.rest_density[i] / self.ps.lambda_t_i[i]
+        
+        volume_squared_sum = 0.0
+        sum_over_j = 0.0
+        self.ps.for_all_negihbours(i, self.helper_sum_over_j, sum_over_j)
+        sum_over_k = 0.0
+        self.ps.for_all_negihbours(i, self.helper_sum_over_k, sum_over_k)
+        sum_over_b = 0.0
+        self.ps.for_all_negihbours(i, self.helper_sum_over_b, sum_over_b)
+        deltaTime2 = deltaTime * deltaTime
+        self.ps.jacobian_diagonal[i] = p_lame - deltaTime2 * volume_squared_sum - deltaTime2 * (sum_over_j + 1.5 * sum_over_b) * sum_over_k
 
     @ti.kernel
     def implicit_solver_prepare(self, deltaTime: float):
         #compute sph discretization using eq 6
+        # need to find predicted velocity but that can be done later
         for i in range(self.ps.num_particles):
             self.ps.p_star[i] = 0
             velocity_div = 0.0
-            # self.ps.for_all_negihbours(i, self.discretization, velocity_div)
-            for j in range(self.ps.num_particles):
-                if j == i: continue
-                self.discretization(i, j, velocity_div)
+            self.ps.for_all_negihbours(i, self.discretization, velocity_div)
+            # for j in range(self.ps.num_particles):
+            #     self.discretization(i, j, velocity_div)
             self.ps.p_star[i] = self.ps.density[i] - deltaTime * self.ps.density[i] * velocity_div
-            
+            # self.compute_jacobian_diagonal_entry(i, deltaTime)
 
     def solve_a_lambda(self, deltaTime):
         self.implicit_solver_prepare(deltaTime)
@@ -302,9 +332,11 @@ class SnowSolver:
             self.integrate_velocity(deltaTime)
         # these last steps are the same regardless of solver type
         self.update_position(deltaTime)
+        print("Step")
 
     def step(self, deltaTime):
         # step physics
+        self.ps.update_grid()
         self.substep(deltaTime)
         # enforce the boundary of the domain (and later rigid bodies)
         self.enforce_boundary_3D()
