@@ -148,19 +148,24 @@ class SnowSolver:
             self.ps.position[i] = self.ps.position[i] + deltaTime * self.ps.velocity[i]
 
     @ti.func
+    def calc_density(self, i_idx, j_idx, d:ti.template()):
+        #rnorm = ti.Vector.norm(self.ps.position[i_idx] - self.ps.position[j_idx])
+        d += 1 # self.cubic_kernel(rnorm) * ti.cast(self.ps.m_k, ti.f32)
+
+    @ti.func
     def compute_rest_density(self, i):
         # first the density is computed, then
         # the rest density is derived
-        # this will be slow as long as there is no neighborhood search
-        x_i = self.ps.position[i]
-        self.ps.density[i] = 0
-        # neighboorhood = get_neighborhood(x_i)
-        for j in range(self.ps.num_particles):
-            w_ij = self.kernel_lookup(ti.Vector.norm(x_i - self.ps.position[j]))
-            self.ps.density[i] += self.ps.m_k * w_ij
+        
+        density_i = ti.Vector([0.0])
+        self.ps.for_all_neighbours(i, self.calc_density, density_i)
+        self.ps.density[i] = density_i
 
-        # it is unclear to me whether F has to be from timestep t+1
-        # or if the one from t is fine.
+        # old code
+        #for j in range(self.ps.num_particles):
+        #    w_ij = self.kernel_lookup(ti.Vector.norm(x_i - self.ps.position[j]))
+        #    self.ps.density[i] += self.ps.m_k * w_ij
+
         detF = ti.Matrix.determinant(self.ps.deformation_gradient[i])
         self.ps.rest_density[i] = self.ps.density[i] * ti.abs(detF)
         
@@ -178,23 +183,26 @@ class SnowSolver:
         #compute sph discretization using eq 6
         for i in range(self.ps.num_particles):
             velocity_div = ti.Vector([0.0, 0.0, 0.0])
-            self.ps.for_all_negihbours(i, self.discretization, velocity_div)
+            self.ps.for_all_neighbours(i, self.discretization, velocity_div)
 
     def solve_a_lambda(self):
         self.implicit_solver_prepare()
+
+    @ti.func
+    def aux_correction_matrix(self, i_idx, j_idx, res:ti.template()):
+        x_ij = self.ps.position[i_idx] - self.ps.position[j_idx] # x_ij: vec3
+        w_ij = self.cubic_kernel_derivative(x_ij)
+        v_j = self.get_volume(j_idx)
+
+        res += (v_j * w_ij).outer_product(x_ij)
+
 
     @ti.func
     def compute_correction_matrix(self, i):
         x_i = self.ps.position[i]
         self.ps.is_pseudo_L_i[i] = False
         tmp_i = ti.Matrix.zero(dt=float, n=3, m=3)
-        # this should be only particles in the neighborhood
-        for j in range(self.ps.num_particles):
-            x_ij = x_i - self.ps.position[j] # x_ij: vec3
-            w_ij = self.grad_kernel_lookup(x_ij)
-            v_j = self.get_volume(j)
-
-            tmp_i += (v_j * w_ij).outer_product(x_ij)
+        self.ps.for_all_neighbours(i, self.aux_correction_matrix, tmp_i)
 
         det = ti.Matrix.determinant(tmp_i)
         if det != 0: 
@@ -232,11 +240,13 @@ class SnowSolver:
 
     @ti.kernel
     def compute_internal_forces(self):
+        #ti.loop_config(serialize=True)
         for i in range(self.ps.num_particles):
             self.compute_rest_density(i)
             self.compute_correction_matrix(i)
             self.compute_accel_ext(i)
             self.compute_accel_friction(i)
+            #print("\r",  i, end="")
 
     @ti.kernel
     def integrate_deformation_gradient(self, deltaTime:float):
@@ -296,6 +306,7 @@ class SnowSolver:
         self.update_position(deltaTime)
 
     def step(self, deltaTime):
+        self.ps.update_grid()
         # step physics
         self.substep(deltaTime)
         # enforce the boundary of the domain (and later rigid bodies)

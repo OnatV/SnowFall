@@ -124,7 +124,7 @@ class ParticleSystem:
         return (i, j, k)
     
     @ti.func
-    def for_all_negihbours(self, i, func : ti.template(), ret : ti.template()):
+    def for_all_neighbours(self, i, func : ti.template(), ret : ti.template()):
         '''
             Only iterates over 1 neighbours of grid cell i to find the points in the neighbourhood..
             A slow function because:, 
@@ -139,7 +139,7 @@ class ParticleSystem:
             if self.num_grid_cells - 1 == min(self.num_grid_cells - 1, current_grid) : continue
             for j in range(self.grid_num_particles[current_grid]):
                 p_j = self.grid[current_grid, j] # Get point idx
-                if i!= j and (self.position[i] - self.position[p_j]).norm() < self.smoothing_radius:
+                if i != j and (self.position[i] - self.position[p_j]).norm() < self.smoothing_radius:
                     func(i, p_j, ret)
     
     # def sum_all_negihbours(self, i, func : ti.template(), ret : ti.template()):

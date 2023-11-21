@@ -17,7 +17,7 @@ class SnowConfig:
         self.deltaTime = 0.01
         self.wind_direction = wind_direction
 
-        self.grid_spacing = 0.01 ##Spacing between grid cells should be close to particle radius
+        self.grid_spacing = 0.1 ##Spacing between grid cells should be close to particle radius
         self.grid_max_particles_per_cell = 100 ##Needed because taichi doesn't support dynamic arrays well, can be decreased if grid spacing is decreased
         self.grid_size = 50 ##grid spacing * grid size >= domain size needs to be satisfied
 
