@@ -50,6 +50,8 @@ class ParticleSystem:
         self.is_pseudo_L_i = ti.field(dtype=bool, shape=self.num_particles)
         self.lambda_t_i = ti.field(dtype=float, shape=self.num_particles) # Lame' parameters
         self.G_t_i = ti.field(dtype=float, shape=self.num_particles) # Lame' parameters
+        self.p_star = ti.Vector.field(1, dtype=float, shape=self.num_particles)
+        self.jacobian_diagonal = ti.Vector.field(1, dtype=float, shape=self.num_particles)
 
         self.grid = ti.field(dtype=int, shape=(self.grid_size, self.max_particles_per_cell))   ##Holds the indices of partices at grid points
         self.grid_new = ti.field(dtype=int, shape=(self.grid_size, self.max_particles_per_cell))   ##Holds the indices of partices at grid points
@@ -87,13 +89,13 @@ class ParticleSystem:
             self.grid[grid_idx, self.grid_num_particles[grid_idx]] = i
             self.grid_num_particles[grid_idx] += 1
             self.particle_to_grid[i] = grid_idx
-
+    
+    # this function converts a particle to a grid index
     @ti.func
     def to_grid_idx(self, i):
         '''
             @TODO: This function assumes grid_size is larger 
         '''
-
         p = self.position[i]
         x = p.x // self.grid_spacing
         y = p.y // self.grid_spacing
@@ -111,6 +113,15 @@ class ParticleSystem:
         z_ = z % self.grid_size
 
         return int(x_ + y_ * self.grid_size + z_ * self.grid_size * self.grid_size)
+
+    # takes a grid index and converts it to a 3D index
+    # this probably can and should be precomputed
+    @ti.func
+    def grid_ind_to_ijk(self, n):
+        i = n % self.grid_size
+        j = (i / self.grid_size) % self.grid_size
+        k = i / (self.grid_size * self.grid_size)
+        return (i, j, k)
     
     @ti.func
     def for_all_negihbours(self, i, func : ti.template(), ret : ti.template()):
@@ -127,9 +138,33 @@ class ParticleSystem:
             if max(0, current_grid) == 0 : continue
             if self.num_grid_cells - 1 == min(self.num_grid_cells - 1, current_grid) : continue
             for j in range(self.grid_num_particles[current_grid]):
-                p_j = self.grid[current_grid, j] #Get point idx
-                if i!= j and self.position[i].distance(self.position[p_j]) < self.smoothing_radius:
+                p_j = self.grid[current_grid, j] # Get point idx
+                if i!= j and (self.position[i] - self.position[p_j]).norm() < self.smoothing_radius:
                     func(i, p_j, ret)
+    
+    # def sum_all_negihbours(self, i, func : ti.template(), ret : ti.template()):
+    #     '''
+    #         Only iterates over 1 neighbours of grid cell i to find the points in the neighbourhood..
+    #         A slow function because:, 
+    #             -can't be parallelized.
+    #             -if checks are not static.
+    #     '''
+    #     grid_idx = self.to_grid_idx(i)
+    #     ###Iterate over all neighbours of grid cell i
+    #     for x,y,z in ti.ndrange((-1,2),(-1,2),(-1,2)):
+    #         current_grid = grid_idx + self.convert_grid_ix(x,y,z)
+    #         if max(0, current_grid) == 0 : continue
+    #         if self.num_grid_cells - 1 == min(self.num_grid_cells - 1, current_grid) : continue
+    #         for j in range(self.grid_num_particles[current_grid]):
+    #             p_j = self.grid[current_grid, j] # Get point idx
+    #             if i!= j and self.position[i].distance(self.position[p_j]) < self.smoothing_radius:
+    #                 func(i, p_j, ret)
+
+    # @ti.func
+    # def find_neighbors_as_list(self, i):
+    #     current_particle_grid_idx = self.particle_to_grid[i]
+    #     ret = ti.Vector.field(1, shape=self.max_particles_per_cell)
+
 
 
     def visualize(self):
