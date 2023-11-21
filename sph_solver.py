@@ -80,12 +80,12 @@ class SnowSolver:
     @ti.kernel
     def enforce_boundary_3D(self):
         for i in range(self.ps.num_particles):
-            if self.ps.position[i].y < self.ps.domain_origin[0]:
-                self.ps.position[i].y = self.ps.domain_origin[0]
-            if self.ps.position[i].z < self.ps.domain_origin[1]:
-                self.ps.position[i].z = self.ps.domain_origin[1]
-            if self.ps.position[i].x < self.ps.domain_origin[2]:
-                self.ps.position[i].x = self.ps.domain_origin[2]
+            if self.ps.position[i].y < self.ps.domain_start[0]:
+                self.ps.position[i].y = self.ps.domain_start[0]
+            if self.ps.position[i].z < self.ps.domain_start[1]:
+                self.ps.position[i].z = self.ps.domain_start[1]
+            if self.ps.position[i].x < self.ps.domain_start[2]:
+                self.ps.position[i].x = self.ps.domain_start[2]
             if self.ps.position[i].y > self.ps.domain_end[0]:
                 self.ps.position[i].y = self.ps.domain_end[0]
             if self.ps.position[i].z > self.ps.domain_end[1]:
@@ -170,9 +170,23 @@ class SnowSolver:
         return (self.ps.m_k / self.ps.density[i])[0]
 
     @ti.func
-    def discretization(self, i, k, sum:ti.template()):
+    def gradient_discretization(self, i, k, sum:ti.template()):
         sum += self.get_volume(k) * (self.ps.velocity[k] - self.ps.velocity[i]).dot(self.cubic_kernel_derivative(self.ps.position[i]-self.ps.position[k]))
-        # sum += 0.1
+
+    @ti.func
+    def compute_pressure_gradient(self, i):
+        self.ps.pressure_gradient[i] = 0.0
+        sum_of_pressures = 0.0
+        self.ps.for_all_neighbors(i, self.helper_sum_of_pressure, sum_of_pressures)
+        sum_of_b = 0.0
+        self.ps.for_all_neighbors(i, self.helper_sum_over_b, sum_of_b)
+        self.ps.pressure_gradient[i] = sum_of_pressures + 1.5 * self.ps.pressure[i] * sum_of_b
+
+    @ti.func
+    def helper_sum_of_pressure(self, i, j, sum:ti.template()):
+        sum += (self.ps.pressure[j] + self.ps.pressure[i]) * self.get_volume(j) * self.cubic_kernel_derivative(
+            self.ps.position[i] - self.ps.position[j]
+        )
 
     @ti.func
     def helper_volume_squared_sum(self, i, j, sum: ti.template()):
@@ -193,15 +207,14 @@ class SnowSolver:
     @ti.func
     def compute_jacobian_diagonal_entry(self, i, deltaTime):
         psi = 1.5 # this is a parameter that was set in the paper
-        p_lame =  -self.ps.rest_density[i] / self.ps.lambda_t_i[i]
-        
+        p_lame =  -self.ps.rest_density[i] / self.ps.lambda_t_i[i]        
         volume_squared_sum = 0.0
         sum_over_j = 0.0
-        self.ps.for_all_negihbours(i, self.helper_sum_over_j, sum_over_j)
+        self.ps.for_all_neighbors(i, self.helper_sum_over_j, sum_over_j)
         sum_over_k = 0.0
-        self.ps.for_all_negihbours(i, self.helper_sum_over_k, sum_over_k)
+        self.ps.for_all_neighbors(i, self.helper_sum_over_k, sum_over_k)
         sum_over_b = 0.0
-        self.ps.for_all_negihbours(i, self.helper_sum_over_b, sum_over_b)
+        self.ps.for_all_neighbors(i, self.helper_sum_over_b, sum_over_b)
         deltaTime2 = deltaTime * deltaTime
         self.ps.jacobian_diagonal[i] = p_lame - deltaTime2 * volume_squared_sum - deltaTime2 * (sum_over_j + 1.5 * sum_over_b) * sum_over_k
 
@@ -209,19 +222,38 @@ class SnowSolver:
     def implicit_solver_prepare(self, deltaTime: float):
         #compute sph discretization using eq 6
         # need to find predicted velocity but that can be done later
+        # print("Here")
         for i in range(self.ps.num_particles):
-            self.ps.p_star[i] = 0
+            # print(i)
+            # self.ps.p_star[i] = 0
             velocity_div = 0.0
-            self.ps.for_all_negihbours(i, self.discretization, velocity_div)
-            # for j in range(self.ps.num_particles):
-            #     self.discretization(i, j, velocity_div)
-            self.ps.p_star[i] = self.ps.density[i] - deltaTime * self.ps.density[i] * velocity_div
+            # self.ps.for_all_neighbors(i, self.gradient_discretization, velocity_div)
+            for k in range(self.ps.num_particles):
+                self.gradient_discretization(i, k, velocity_div)
+            # self.ps.p_star[i[0]] = self.ps.density[i[0]] - deltaTime * self.ps.density[i[0]] * velocity_div
             # self.compute_jacobian_diagonal_entry(i, deltaTime)
 
-    def solve_a_lambda(self, deltaTime):
-        self.implicit_solver_prepare(deltaTime)
-        # pass
+    @ti.func
+    def implicit_pressure_solver_step(self, deltaTime):
+        for i in self.ps.num_particles:
+            self.compute_pressure_gradient(i)
+        
+    @ti.kernel
+    def implicit_pressure_solve(self, deltaTime:float):
+        max_iterations = 10
+        is_solved = False
+        it = 0
+        print("here")
+        error = 1.0 # set it to this to initialize it
+        while (~is_solved or it < max_iterations):
+            implicit_pressure_solver_step(deltaTime)
+            it = it + 1
 
+    def solve_a_lambda(self, deltaTime):
+        # print("solve_alam")
+        self.implicit_solver_prepare(deltaTime)
+        # self.implicit_pressure_solve(deltaTime)
+        pass
     @ti.func
     def compute_correction_matrix(self, i):
         x_i = self.ps.position[i]
@@ -283,18 +315,11 @@ class SnowSolver:
         #     self.ps.deformation_gradient[i] = self.ps.deformation_gradient[i] + deltaTime * self.ps.velocity[i]
         #     self.ps.deformation_gradient[i] = self.clamp_deformation_gradients(self.ps.deformation_gradient[i])
 
-
-
     @ti.func
     def clamp_deformation_gradients(self, matrix):
-
-
         U, S, V = ti.svd(matrix)
         S = ti.math.clamp(S, self.ps.theta_clamp_c, self.ps.theta_clamp_s)
         return V @ S @ V.transpose() ## This supposedly removes the rotation part
-
-
-
     
 
     def substep(self, deltaTime):
@@ -318,8 +343,9 @@ class SnowSolver:
         if self.snow_implemented:
             # these functions should update the acceleration field of the particles
             self.compute_internal_forces()
+            # print("before solve a")
             self.solve_a_lambda(deltaTime)
-            #self.solve_a_G()
+            # self.solve_a_G()
             self.integrate_velocity(deltaTime)
             self.integrate_deformation_gradient(deltaTime)
 
@@ -332,11 +358,13 @@ class SnowSolver:
             self.integrate_velocity(deltaTime)
         # these last steps are the same regardless of solver type
         self.update_position(deltaTime)
-        print("Step")
+        # print("Step")
 
     def step(self, deltaTime):
         # step physics
+        # print("before updating the grid")
         self.ps.update_grid()
+        # print("before substep")
         self.substep(deltaTime)
         # enforce the boundary of the domain (and later rigid bodies)
         self.enforce_boundary_3D()
