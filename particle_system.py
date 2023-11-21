@@ -59,12 +59,12 @@ class ParticleSystem:
             [1 - self.cfg.theta_c, 0, 0],
             [0, 1 - self.cfg.theta_c, 0],
             [0, 0, 1 - self.cfg.theta_c]
-        ], dtype=float)
+        ])
         self.theta_clamp_s =ti.Matrix([
             [1 + self.cfg.theta_s, 0, 0],
             [0, 1 + self.cfg.theta_s, 0],
             [0, 0, 1 + self.cfg.theta_s]
-        ], dtype=float)
+        ])
 
     @ti.kernel
     def initialize_fields(self):
