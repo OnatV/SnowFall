@@ -158,7 +158,7 @@ class SnowSolver:
         # the rest density is derived
         
         density_i = ti.Vector([0.0])
-        self.ps.for_all_neighbours(i, self.calc_density, density_i)
+        self.ps.for_all_neighbors(i, self.calc_density, density_i)
         self.ps.density[i] = density_i
 
         # old code
@@ -273,7 +273,7 @@ class SnowSolver:
         x_i = self.ps.position[i]
         self.ps.is_pseudo_L_i[i] = False
         tmp_i = ti.Matrix.zero(dt=float, n=3, m=3)
-        self.ps.for_all_neighbours(i, self.aux_correction_matrix, tmp_i)
+        self.ps.for_all_neighbors(i, self.aux_correction_matrix, tmp_i)
 
         det = ti.Matrix.determinant(tmp_i)
         if det != 0: 
@@ -311,7 +311,7 @@ class SnowSolver:
     @ti.kernel
     def compute_internal_forces(self):
         #ti.loop_config(serialize=True)
-        for i in range(self.ps.num_particles):
+        for i in ti.grouped(self.ps.position):
             self.compute_rest_density(i)
             self.compute_correction_matrix(i)
             self.compute_accel_ext(i)
