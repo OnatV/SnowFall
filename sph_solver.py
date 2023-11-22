@@ -80,18 +80,18 @@ class SnowSolver:
     @ti.kernel
     def enforce_boundary_3D(self):
         for i in range(self.ps.num_particles):
-            if self.ps.position[i].y < self.ps.domain_start[0]:
-                self.ps.position[i].y = self.ps.domain_start[0]
-            if self.ps.position[i].z < self.ps.domain_start[1]:
-                self.ps.position[i].z = self.ps.domain_start[1]
-            if self.ps.position[i].x < self.ps.domain_start[2]:
-                self.ps.position[i].x = self.ps.domain_start[2]
-            if self.ps.position[i].y > self.ps.domain_end[0]:
-                self.ps.position[i].y = self.ps.domain_end[0]
-            if self.ps.position[i].z > self.ps.domain_end[1]:
-                self.ps.position[i].z = self.ps.domain_end[1]
-            if self.ps.position[i].x > self.ps.domain_end[2]:
-                self.ps.position[i].x = self.ps.domain_end[2]
+            if self.ps.position[i].x < self.ps.domain_start[0]:
+                self.ps.position[i].x = self.ps.domain_start[0]
+            if self.ps.position[i].y < self.ps.domain_start[1]:
+                self.ps.position[i].y = self.ps.domain_start[1]
+            if self.ps.position[i].z < self.ps.domain_start[2]:
+                self.ps.position[i].z = self.ps.domain_start[2]
+            if self.ps.position[i].x < self.ps.domain_end[0]:
+                self.ps.position[i].x = self.ps.domain_end[0]
+            if self.ps.position[i].y < self.ps.domain_end[1]:
+                self.ps.position[i].y = self.ps.domain_end[1]
+            if self.ps.position[i].z < self.ps.domain_end[2]:
+                self.ps.position[i].z = self.ps.domain_end[2]
 
     @ti.func
     def cubic_kernel(self, r_norm):
