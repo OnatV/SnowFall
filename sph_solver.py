@@ -223,13 +223,13 @@ class SnowSolver:
         #compute sph discretization using eq 6
         # need to find predicted velocity but that can be done later
         # print("Here")
-        for i in range(self.ps.num_particles):
+        for i in ti.grouped(self.ps.position):
             # print(i)
             # self.ps.p_star[i] = 0
             velocity_div = 0.0
-            # self.ps.for_all_neighbors(i, self.gradient_discretization, velocity_div)
-            for k in range(self.ps.num_particles):
-                self.gradient_discretization(i, k, velocity_div)
+            self.ps.for_all_neighbors(i, self.gradient_discretization, velocity_div)
+            # for k in range(self.ps.num_particles):
+            #     self.gradient_discretization(i, k, velocity_div)
             # self.ps.p_star[i[0]] = self.ps.density[i[0]] - deltaTime * self.ps.density[i[0]] * velocity_div
             # self.compute_jacobian_diagonal_entry(i, deltaTime)
 

@@ -65,7 +65,7 @@ class ParticleSystem:
         self.grid_size_y = int((self.domain_end[1] - self.domain_start[1]) / self.grid_spacing)
         self.grid_size_z = int((self.domain_end[2] - self.domain_start[2]) / self.grid_spacing)
         ## allocate memory for the grid
-        self.grid_particles_num = ti.Vector.field(n=self.max_particles_per_cell, shape=(self.grid_size_x * self.grid_size_y * self.grid_size_z), dtype=int)
+        self.grid_particles_num = ti.field(int, shape=(self.grid_size_x * self.grid_size_y * self.grid_size_z))
         self.grid_ids = ti.field(int, shape=self.num_particles)
 
 
@@ -187,7 +187,7 @@ class ParticleSystem:
         for cell_offset in ti.grouped(ti.ndrange(*((-1, 2),) * self.dim)):
             grid_index = self.flatten_grid_index(center + cell_offset)
             for j in range(self.grid_particles_num[ti.max(0, grid_index - 1)], self.grid_particles_num[grid_index]):
-                if i != j and (self.position[i] - self.position[j]).norm() < self.smoothing_radius:
+                if i[0] != j and (self.position[i] - self.position[j]).norm() < self.smoothing_radius:
                     func(i, j, retval)
 
     # @ti.func
