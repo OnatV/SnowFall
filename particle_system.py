@@ -45,9 +45,9 @@ class ParticleSystem:
         self.rest_density = ti.Vector.field(1, dtype=float, shape=self.num_particles)
         self.position = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.position_0 = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
-        self.pressure = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        self.pressure = ti.field(float, shape=self.num_particles)
         self.pressure_gradient = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
-        self.pressure_laplacian = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        self.pressure_laplacian = ti.Vector.field(1, dtype=float, shape=self.num_particles)
         self.deformation_gradient = ti.Matrix.field(n=3, m=3, dtype=float, shape=self.num_particles) # an num_particles length array of 3x3 matrices
         self.correction_matrix = ti.Matrix.field(n=3, m=3, dtype=float, shape=self.num_particles) # an num_particles length array of 3x3 matrices
         self.pseudo_correction_matrix = ti.Matrix.field(n=3, m=3, dtype=float, shape=self.num_particles) # an num_particles length array of 3x3 matrices
@@ -55,7 +55,7 @@ class ParticleSystem:
         self.lambda_t_i = ti.field(dtype=float, shape=self.num_particles) # Lame' parameters
         self.G_t_i = ti.field(dtype=float, shape=self.num_particles) # Lame' parameters
         self.jacobian_diagonal = ti.Vector.field(1, dtype=float, shape=self.num_particles)
-
+        self.density_error = ti.Vector.field(1, dtype=float, shape=self.num_particles)
         # self.grid = ti.field(dtype=int, shape=(self.grid_size, self.max_particles_per_cell))   ##Holds the indices of partices at grid points
         # self.grid_new = ti.field(dtype=int, shape=(self.grid_size, self.max_particles_per_cell))   ##Holds the indices of partices at grid points
         # self.grid_num_particles = ti.field(dtype=int, shape=(self.grid_size))  ##Holds the number of particles at each grid point
