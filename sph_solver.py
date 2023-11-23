@@ -149,8 +149,8 @@ class SnowSolver:
 
     @ti.func
     def calc_density(self, i_idx, j_idx, d:ti.template()):
-        #rnorm = ti.Vector.norm(self.ps.position[i_idx] - self.ps.position[j_idx])
-        d += 1 # self.cubic_kernel(rnorm) * ti.cast(self.ps.m_k, ti.f32)
+        rnorm = ti.Vector.norm(self.ps.position[i_idx] - self.ps.position[j_idx])
+        d +=  self.cubic_kernel(rnorm) * ti.cast(self.ps.m_k, ti.f32)
 
     @ti.func
     def compute_rest_density(self, i):
@@ -266,7 +266,6 @@ class SnowSolver:
         v_j = self.get_volume(j_idx)
 
         res += (v_j * w_ij).outer_product(x_ij)
-
 
     @ti.func
     def compute_correction_matrix(self, i):
