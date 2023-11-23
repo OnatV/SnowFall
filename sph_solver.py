@@ -291,7 +291,7 @@ class SnowSolver:
         # print("solve_alam")
         self.implicit_solver_prepare(deltaTime)
         self.implicit_pressure_solve(deltaTime)
-        self.compute_a_lambda()
+        # self.compute_a_lambda()
 
     @ti.func
     def aux_correction_matrix(self, i_idx, j_idx, res:ti.template()):
@@ -406,13 +406,17 @@ class SnowSolver:
 
     def step(self, deltaTime):
         self.ps.update_grid()
+        # self.ps.cumsum.run(self.ps.grid_particles_num)
+        self.ps.cumsum_indx()
+        self.ps.sort_particles()
         # step physics
         # print("before updating the grid")
-        self.ps.update_grid()
+        # self.ps.update_grid()
         # print("before substep")
         self.substep(deltaTime)
         # enforce the boundary of the domain (and later rigid bodies)
         self.enforce_boundary_3D()
         # update time
         self.time += deltaTime
+        print(self.ps.position[0])
         print("Step")
