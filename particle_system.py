@@ -29,6 +29,7 @@ class ParticleSystem:
         self.initialize_fields()
         self.update_grid()
         print("Built grid")
+        print(self.position[0])
         # for visualization
         self.window = ti.ui.Window("Snowfall", (800,800))
         self.canvas = self.window.get_canvas()
@@ -45,9 +46,9 @@ class ParticleSystem:
         self.rest_density = ti.Vector.field(1, dtype=float, shape=self.num_particles)
         self.position = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.position_0 = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
-        self.pressure = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        self.pressure = ti.field(float, shape=self.num_particles)
         self.pressure_gradient = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
-        self.pressure_laplacian = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        self.pressure_laplacian = ti.Vector.field(1, dtype=float, shape=self.num_particles)
         self.deformation_gradient = ti.Matrix.field(n=3, m=3, dtype=float, shape=self.num_particles) # an num_particles length array of 3x3 matrices
         self.correction_matrix = ti.Matrix.field(n=3, m=3, dtype=float, shape=self.num_particles) # an num_particles length array of 3x3 matrices
         self.pseudo_correction_matrix = ti.Matrix.field(n=3, m=3, dtype=float, shape=self.num_particles) # an num_particles length array of 3x3 matrices
@@ -55,7 +56,7 @@ class ParticleSystem:
         self.lambda_t_i = ti.field(dtype=float, shape=self.num_particles) # Lame' parameters
         self.G_t_i = ti.field(dtype=float, shape=self.num_particles) # Lame' parameters
         self.jacobian_diagonal = ti.Vector.field(1, dtype=float, shape=self.num_particles)
-
+        self.density_error = ti.Vector.field(1, dtype=float, shape=self.num_particles)
         # self.grid = ti.field(dtype=int, shape=(self.grid_size, self.max_particles_per_cell))   ##Holds the indices of partices at grid points
         # self.grid_new = ti.field(dtype=int, shape=(self.grid_size, self.max_particles_per_cell))   ##Holds the indices of partices at grid points
         # self.grid_num_particles = ti.field(dtype=int, shape=(self.grid_size))  ##Holds the number of particles at each grid point
@@ -66,8 +67,20 @@ class ParticleSystem:
         self.grid_size_z = int((self.domain_end[2] - self.domain_start[2]) / self.grid_spacing)
         ## allocate memory for the grid
         self.grid_particles_num = ti.field(int, shape=(self.grid_size_x * self.grid_size_y * self.grid_size_z))
+        self.grid_particles_num_swap = ti.field(int, shape=(self.grid_size_x * self.grid_size_y * self.grid_size_z))
         self.grid_ids = ti.field(int, shape=self.num_particles)
+        self.grid_ids_swap = ti.field(int, shape=self.num_particles)
+        self.grid_ids_new = ti.field(int, shape=self.num_particles)
+        # allocate swaps for sorting
+        self.position_swap = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        self.position_0_swap = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        self.velocity_swap = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        self.acceleration_swap  = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        self.density_swap = ti.Vector.field(1, dtype=float, shape=self.num_particles)
+        self.pressure_swap = ti.field(float, shape=self.num_particles)
 
+        # cumsum for particle grid
+        # self.cumsum = ti.algorithms.PrefixSumExecutor(self.grid_particles_num.shape[0])
 
         self.theta_clamp_c = ti.Matrix([
             [1 - self.cfg.theta_c, 0, 0],
@@ -91,6 +104,10 @@ class ParticleSystem:
             self.position[i] = ti.Vector([x, y, z])
         print("Intialized!")
 
+    def cumsum_indx(self):
+        np_arr = np.cumsum(self.grid_particles_num.to_numpy())
+        self.grid_particles_num.from_numpy(np_arr)
+
     @ti.func
     def pos_to_index(self, pos):
         return (pos / self.grid_spacing).cast(int)
@@ -104,6 +121,33 @@ class ParticleSystem:
         return self.flatten_grid_index(self.pos_to_index(pos))
 
     @ti.kernel
+    def sort_particles(self):
+        for i in range(self.num_particles):
+            idx = self.num_particles - 1 - i
+            offset = 0
+            if self.grid_ids[idx] - 1 >= 0:
+                offset = self.grid_particles_num[self.grid_ids[idx] - 1]
+            self.grid_ids_new[idx] = ti.atomic_sub(self.grid_particles_num_swap[self.grid_ids[idx]], 1) - 1 + offset
+        # copy data into swaps, with reordering
+        for i in ti.grouped(self.grid_ids):
+            idx = self.grid_ids_new[i]
+            self.grid_ids_swap[idx] = self.grid_ids[i]
+            self.position_0_swap[idx] = self.position_0[i]
+            self.position_swap[idx] = self.position[i]
+            self.velocity_swap[idx] = self.velocity[i]
+            self.acceleration_swap[idx] = self.acceleration[i]
+            self.density_swap[idx] = self.density[i]
+            self.pressure_swap[idx] = self.pressure[i]
+        # repopulate original fields
+        for i in ti.grouped(self.grid_ids):
+            self.grid_ids[i] = self.grid_ids_swap[i]
+            self.position_0[i] = self.position_0_swap[i]
+            self.position[i] = self.position_swap[i]
+            self.velocity[i] = self.velocity_swap[i]
+            self.acceleration[i] = self.acceleration_swap[i]
+            self.density[i] = self.density_swap[i]
+            self.pressure[i] = self.pressure_swap[i]
+    @ti.kernel
     def update_grid(self):
         for i in ti.grouped(self.grid_particles_num):
             self.grid_particles_num[i] = 0
@@ -111,6 +155,8 @@ class ParticleSystem:
             grid_index = self.get_flattened_grid_index(self.position[i])
             self.grid_ids[i] = grid_index
             ti.atomic_add(self.grid_particles_num[grid_index], 1)
+        for i in ti.grouped(self.grid_particles_num):
+            self.grid_particles_num_swap[i] = self.grid_particles_num[i]
 
     # @ti.kernel
     # def update_grid(self):
