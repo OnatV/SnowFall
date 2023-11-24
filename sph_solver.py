@@ -186,7 +186,7 @@ class SnowSolver:
         lp = 0.0
         self.ps.for_all_neighbors(i, self.helper_diff_of_pressure_grad, lp)
         lp2 = 0.0
-        self.ps.for_all_neighbors(i, self.helper_sum_over_b, lp2)
+        # self.ps.for_all_neighbors(i, self.helper_sum_over_b, lp2)
         self.ps.pressure_laplacian[i] = lp + 1.5 * lp2
         # now compute Ap
         A_p = -self.ps.rest_density[i] / self.ps.lambda_t_i[i] * self.ps.pressure[i] + deltaTime2 * self.ps.pressure_laplacian[i]
@@ -208,7 +208,7 @@ class SnowSolver:
         sum_of_pressures = ti.Vector([0.0, 0.0, 0.0])
         self.ps.for_all_neighbors(i, self.helper_sum_of_pressure, sum_of_pressures)
         sum_of_b = 0.0
-        self.ps.for_all_neighbors(i, self.helper_sum_over_b, sum_of_b)
+        # self.ps.for_all_neighbors(i, self.helper_sum_over_b, sum_of_b)
         self.ps.pressure_gradient[i] = sum_of_pressures + 1.5 * self.ps.pressure[i] * sum_of_b
 
     @ti.func
@@ -223,29 +223,30 @@ class SnowSolver:
     
     @ti.func
     def helper_sum_over_j(self, i, j, sum:ti.template()):
-        sum += self.get_volume(j) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[j]).norm()
+        sum += self.get_volume(j) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[j])
 
     @ti.func
     def helper_sum_over_b(self, i, b, sum:ti.template()):
-        sum += self.get_volume(b) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[b]).norm()
+        sum += self.get_volume(b) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[b])
 
     @ti.func
     def helper_sum_over_k(self, i, k, sum:ti.template()):
-        sum += self.get_volume(k) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[k]).norm()
+        sum += self.get_volume(k) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[k])
         
     @ti.func
     def compute_jacobian_diagonal_entry(self, i, deltaTime):
         psi = 1.5 # this is a parameter that was set in the paper
         p_lame =  -self.ps.rest_density[i] / self.ps.lambda_t_i[i]        
         volume_squared_sum = 0.0
-        sum_over_j = 0.0
-        self.ps.for_all_neighbors(i, self.helper_sum_over_j, sum_over_j)
-        sum_over_k = 0.0
-        self.ps.for_all_neighbors(i, self.helper_sum_over_k, sum_over_k)
-        sum_over_b = 0.0
-        self.ps.for_all_neighbors(i, self.helper_sum_over_b, sum_over_b)
+        self.ps.for_all_neighbors(i, self.helper_volume_squared_sum, volume_squared_sum)
+        sum_over_j = ti.Vector([0.0,0.0,0.0])
+        # self.ps.for_all_neighbors(i, self.helper_sum_over_j, sum_over_j)
+        sum_over_k = ti.Vector([0.0,0.0,0.0])
+        # self.ps.for_all_neighbors(i, self.helper_sum_over_k, sum_over_k)
+        sum_over_b = ti.Vector([0.0,0.0,0.0])
+        # self.ps.for_all_neighbors(i, self.helper_sum_over_b, sum_over_b)
         deltaTime2 = deltaTime * deltaTime
-        self.ps.jacobian_diagonal[i] = p_lame - deltaTime2 * volume_squared_sum - deltaTime2 * (sum_over_j + 1.5 * sum_over_b) * sum_over_k
+        self.ps.jacobian_diagonal[i] = p_lame - deltaTime2 * volume_squared_sum - deltaTime2 * (sum_over_j + 1.5 * sum_over_b).dot(sum_over_k)
 
     @ti.kernel
     def implicit_solver_prepare(self, deltaTime: float):
@@ -255,6 +256,7 @@ class SnowSolver:
         for i in ti.grouped(self.ps.position):
             # print(i)
             self.ps.p_star[i] = 0
+            self.ps.jacobian_diagonal[i] = 0
             velocity_div = 0.0
             self.ps.for_all_neighbors(i, self.divergence_discretization, velocity_div)
             self.ps.p_star[i] = self.ps.density[i] - deltaTime * self.ps.density[i] * velocity_div
@@ -271,8 +273,12 @@ class SnowSolver:
     
     @ti.kernel
     def compute_a_lambda(self):
+        print("density", self.ps.density[0])
+        print("pgrad", self.ps.pressure_gradient[0])
         for i in ti.grouped(self.ps.position):
-            self.ps.acceleration[i] -= (1.0 / self.ps.density[i])[0] * self.ps.pressure_gradient[i]
+            if self.ps.density[i][0] == 0.0:
+                continue
+            self.ps.acceleration[i] -= (1.0 / self.ps.density[i][0]) * self.ps.pressure_gradient[i]
 
     def implicit_pressure_solve(self, deltaTime:float):
         max_iterations = 100
@@ -285,13 +291,14 @@ class SnowSolver:
             avg_density_error = self.implicit_pressure_solver_step(deltaTime)
             if avg_density_error < 0.1:
                 is_solved = True 
+                print("Converged")
             it = it + 1
 
     def solve_a_lambda(self, deltaTime):
         # print("solve_alam")
         self.implicit_solver_prepare(deltaTime)
         self.implicit_pressure_solve(deltaTime)
-        # self.compute_a_lambda()
+        self.compute_a_lambda()
 
     @ti.func
     def aux_correction_matrix(self, i_idx, j_idx, res:ti.template()):
@@ -406,8 +413,8 @@ class SnowSolver:
     def step(self, deltaTime):
         self.ps.update_grid()
         # self.ps.cumsum.run(self.ps.grid_particles_num)
-        self.ps.cumsum_indx()
-        self.ps.sort_particles()
+        # self.ps.cumsum_indx()
+        # self.ps.sort_particles()
         # step physics
         # print("before updating the grid")
         # self.ps.update_grid()

@@ -57,27 +57,30 @@ class ParticleSystem:
         self.G_t_i = ti.field(dtype=float, shape=self.num_particles) # Lame' parameters
         self.jacobian_diagonal = ti.Vector.field(1, dtype=float, shape=self.num_particles)
         self.density_error = ti.Vector.field(1, dtype=float, shape=self.num_particles)
-        # self.grid = ti.field(dtype=int, shape=(self.grid_size, self.max_particles_per_cell))   ##Holds the indices of partices at grid points
-        # self.grid_new = ti.field(dtype=int, shape=(self.grid_size, self.max_particles_per_cell))   ##Holds the indices of partices at grid points
-        # self.grid_num_particles = ti.field(dtype=int, shape=(self.grid_size))  ##Holds the number of particles at each grid point
-        # self.particle_to_grid = ti.field(dtype=int, shape=self.num_particles)        ##Holds the grid point index of each particle, currently not needed because we
 
         self.grid_size_x = int((self.domain_end[0] - self.domain_start[0]) / self.grid_spacing)
         self.grid_size_y = int((self.domain_end[1] - self.domain_start[1]) / self.grid_spacing)
         self.grid_size_z = int((self.domain_end[2] - self.domain_start[2]) / self.grid_spacing)
-        ## allocate memory for the grid
-        self.grid_particles_num = ti.field(int, shape=(self.grid_size_x * self.grid_size_y * self.grid_size_z))
-        self.grid_particles_num_swap = ti.field(int, shape=(self.grid_size_x * self.grid_size_y * self.grid_size_z))
-        self.grid_ids = ti.field(int, shape=self.num_particles)
-        self.grid_ids_swap = ti.field(int, shape=self.num_particles)
-        self.grid_ids_new = ti.field(int, shape=self.num_particles)
-        # allocate swaps for sorting
-        self.position_swap = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
-        self.position_0_swap = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
-        self.velocity_swap = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
-        self.acceleration_swap  = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
-        self.density_swap = ti.Vector.field(1, dtype=float, shape=self.num_particles)
-        self.pressure_swap = ti.field(float, shape=self.num_particles)
+        self.grid_size = self.grid_size_x * self.grid_size_y * self.grid_size_z
+        self.grid = ti.field(dtype=int, shape=(self.grid_size, self.max_particles_per_cell))   ##Holds the indices of partices at grid points
+        self.grid_new = ti.field(dtype=int, shape=(self.grid_size, self.max_particles_per_cell))   ##Holds the indices of partices at grid points
+        self.grid_num_particles = ti.field(dtype=int, shape=(self.grid_size))  ##Holds the number of particles at each grid point
+        self.particle_to_grid = ti.field(dtype=int, shape=self.num_particles)        ##Holds the grid point index of each particle, currently not needed because we
+
+        # #2nd grid:
+        # ## allocate memory for the grid
+        # self.grid_particles_num = ti.field(int, shape=(self.grid_size_x * self.grid_size_y * self.grid_size_z))
+        # self.grid_particles_num_swap = ti.field(int, shape=(self.grid_size_x * self.grid_size_y * self.grid_size_z))
+        # self.grid_ids = ti.field(int, shape=self.num_particles)
+        # self.grid_ids_swap = ti.field(int, shape=self.num_particles)
+        # self.grid_ids_new = ti.field(int, shape=self.num_particles)
+        # # allocate swaps for sorting
+        # self.position_swap = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        # self.position_0_swap = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        # self.velocity_swap = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        # self.acceleration_swap  = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        # self.density_swap = ti.Vector.field(1, dtype=float, shape=self.num_particles)
+        # self.pressure_swap = ti.field(float, shape=self.num_particles)
 
         # cumsum for particle grid
         # self.cumsum = ti.algorithms.PrefixSumExecutor(self.grid_particles_num.shape[0])
@@ -104,125 +107,125 @@ class ParticleSystem:
             self.position[i] = ti.Vector([x, y, z])
         print("Intialized!")
 
-    def cumsum_indx(self):
-        np_arr = np.cumsum(self.grid_particles_num.to_numpy())
-        self.grid_particles_num.from_numpy(np_arr)
+    # def cumsum_indx(self):
+    #     np_arr = np.cumsum(self.grid_particles_num.to_numpy())
+    #     self.grid_particles_num.from_numpy(np_arr)
 
-    @ti.func
-    def pos_to_index(self, pos):
-        return (pos / self.grid_spacing).cast(int)
+    # @ti.func
+    # def pos_to_index(self, pos):
+    #     return (pos / self.grid_spacing).cast(int)
 
-    @ti.func
-    def flatten_grid_index(self, grid_index):
-        return grid_index[0] * self.grid_size_y * self.grid_size_z + grid_index[1] * self.grid_size_z + grid_index[2]
+    # @ti.func
+    # def flatten_grid_index(self, grid_index):
+    #     return grid_index[0] * self.grid_size_y * self.grid_size_z + grid_index[1] * self.grid_size_z + grid_index[2]
     
-    @ti.func
-    def get_flattened_grid_index(self, pos):
-        return self.flatten_grid_index(self.pos_to_index(pos))
-
-    @ti.kernel
-    def sort_particles(self):
-        for i in range(self.num_particles):
-            idx = self.num_particles - 1 - i
-            offset = 0
-            if self.grid_ids[idx] - 1 >= 0:
-                offset = self.grid_particles_num[self.grid_ids[idx] - 1]
-            self.grid_ids_new[idx] = ti.atomic_sub(self.grid_particles_num_swap[self.grid_ids[idx]], 1) - 1 + offset
-        # copy data into swaps, with reordering
-        for i in ti.grouped(self.grid_ids):
-            idx = self.grid_ids_new[i]
-            self.grid_ids_swap[idx] = self.grid_ids[i]
-            self.position_0_swap[idx] = self.position_0[i]
-            self.position_swap[idx] = self.position[i]
-            self.velocity_swap[idx] = self.velocity[i]
-            self.acceleration_swap[idx] = self.acceleration[i]
-            self.density_swap[idx] = self.density[i]
-            self.pressure_swap[idx] = self.pressure[i]
-        # repopulate original fields
-        for i in ti.grouped(self.grid_ids):
-            self.grid_ids[i] = self.grid_ids_swap[i]
-            self.position_0[i] = self.position_0_swap[i]
-            self.position[i] = self.position_swap[i]
-            self.velocity[i] = self.velocity_swap[i]
-            self.acceleration[i] = self.acceleration_swap[i]
-            self.density[i] = self.density_swap[i]
-            self.pressure[i] = self.pressure_swap[i]
-    @ti.kernel
-    def update_grid(self):
-        for i in ti.grouped(self.grid_particles_num):
-            self.grid_particles_num[i] = 0
-        for i in ti.grouped(self.position):
-            grid_index = self.get_flattened_grid_index(self.position[i])
-            self.grid_ids[i] = grid_index
-            ti.atomic_add(self.grid_particles_num[grid_index], 1)
-        for i in ti.grouped(self.grid_particles_num):
-            self.grid_particles_num_swap[i] = self.grid_particles_num[i]
+    # @ti.func
+    # def get_flattened_grid_index(self, pos):
+    #     return self.flatten_grid_index(self.pos_to_index(pos))
 
     # @ti.kernel
+    # def sort_particles(self):
+    #     for i in range(self.num_particles):
+    #         idx = self.num_particles - 1 - i
+    #         offset = 0
+    #         if self.grid_ids[idx] - 1 >= 0:
+    #             offset = self.grid_particles_num[self.grid_ids[idx] - 1]
+    #         self.grid_ids_new[idx] = ti.atomic_sub(self.grid_particles_num_swap[self.grid_ids[idx]], 1) - 1 + offset
+    #     # copy data into swaps, with reordering
+    #     for i in ti.grouped(self.grid_ids):
+    #         idx = self.grid_ids_new[i]
+    #         self.grid_ids_swap[idx] = self.grid_ids[i]
+    #         self.position_0_swap[idx] = self.position_0[i]
+    #         self.position_swap[idx] = self.position[i]
+    #         self.velocity_swap[idx] = self.velocity[i]
+    #         self.acceleration_swap[idx] = self.acceleration[i]
+    #         self.density_swap[idx] = self.density[i]
+    #         self.pressure_swap[idx] = self.pressure[i]
+    #     # repopulate original fields
+    #     for i in ti.grouped(self.grid_ids):
+    #         self.grid_ids[i] = self.grid_ids_swap[i]
+    #         self.position_0[i] = self.position_0_swap[i]
+    #         self.position[i] = self.position_swap[i]
+    #         self.velocity[i] = self.velocity_swap[i]
+    #         self.acceleration[i] = self.acceleration_swap[i]
+    #         self.density[i] = self.density_swap[i]
+    #         self.pressure[i] = self.pressure_swap[i]
+    # @ti.kernel
     # def update_grid(self):
-    #     ##First remove all particles from grid
-    #     for i in range(self.num_grid_cells):
-    #         self.grid_num_particles[i] = 0
-    #     for i in range(self.num_particles):   
-    #         grid_idx = self.to_grid_idx(i)
-    #         if self.grid_num_particles[grid_idx] >= self.max_particles_per_cell:
-    #             continue
-    #         self.grid[grid_idx, self.grid_num_particles[grid_idx]] = i
-    #         self.grid_num_particles[grid_idx] += 1
-    #         self.particle_to_grid[i] = grid_idx
-    #     print("Done with update")
+    #     for i in ti.grouped(self.grid_particles_num):
+    #         self.grid_particles_num[i] = 0
+    #     for i in ti.grouped(self.position):
+    #         grid_index = self.get_flattened_grid_index(self.position[i])
+    #         self.grid_ids[i] = grid_index
+    #         ti.atomic_add(self.grid_particles_num[grid_index], 1)
+    #     for i in ti.grouped(self.grid_particles_num):
+    #         self.grid_particles_num_swap[i] = self.grid_particles_num[i]
+
+    @ti.kernel
+    def update_grid(self):
+        ##First remove all particles from grid
+        for i in range(self.grid_size):
+            self.grid_num_particles[i] = 0
+        for i in range(self.num_particles):   
+            grid_idx = self.to_grid_idx(i)
+            if self.grid_num_particles[grid_idx] >= self.max_particles_per_cell:
+                continue
+            self.grid[grid_idx, self.grid_num_particles[grid_idx]] = i
+            self.grid_num_particles[grid_idx] += 1
+            self.particle_to_grid[i] = grid_idx
+        print("Done with update")
     
-    # # this function converts a particle to a grid index
-    # @ti.func
-    # def to_grid_idx(self, i):
-    #     '''
-    #         @TODO: This function assumes grid_size is larger 
-    #     '''
-    #     p = self.position[i]
-    #     x = p.x // self.grid_spacing
-    #     y = p.y // self.grid_spacing
-    #     z = p.z // self.grid_spacing
+    # this function converts a particle to a grid index
+    @ti.func
+    def to_grid_idx(self, i):
+        '''
+            @TODO: This function assumes grid_size is larger 
+        '''
+        p = self.position[i]
+        x = p.x // self.grid_spacing
+        y = p.y // self.grid_spacing
+        z = p.z // self.grid_spacing
 
-    #     return self.convert_grid_ix(x,y,z)
+        return self.convert_grid_ix(x,y,z)
     
-    # @ti.func
-    # def convert_grid_ix(self, x,y,z):
+    @ti.func
+    def convert_grid_ix(self, x,y,z):
 
-    #     ##This ensures the indices are always correct, 
-    #     # but out of bounds indices overflow
-    #     x_ = x % self.grid_size
-    #     y_ = y % self.grid_size
-    #     z_ = z % self.grid_size
+        ##This ensures the indices are always correct, 
+        # but out of bounds indices overflow
+        x_ = x % self.grid_size_x
+        y_ = y % self.grid_size_y
+        z_ = z % self.grid_size_z
 
-    #     return int(x_ + y_ * self.grid_size + z_ * self.grid_size * self.grid_size)
+        return int(x_ + y_ * self.grid_size_y + z_ * self.grid_size_y * self.grid_size_z)
 
     # takes a grid index and converts it to a 3D index
     # this probably can and should be precomputed
-    # @ti.func
-    # def grid_ind_to_ijk(self, n):
-    #     i = n % self.grid_size
-    #     j = (i / self.grid_size) % self.grid_size
-    #     k = i / (self.grid_size * self.grid_size)
-    #     return (i, j, k)
+    @ti.func
+    def grid_ind_to_ijk(self, n):
+        i = n % self.grid_size_x
+        j = (i / self.grid_size_x) % self.grid_size_x
+        k = i / (self.grid_size_x * self.grid_size_x)
+        return (i, j, k)
     
-    # @ti.func
-    # def for_all_neighbours(self, i, func : ti.template(), ret : ti.template()):
-    #     '''
-    #         Only iterates over 1 neighbours of grid cell i to find the points in the neighbourhood..
-    #         A slow function because:, 
-    #             -can't be parallelized.
-    #             -if checks are not static.
-    #     '''
-    #     grid_idx = self.to_grid_idx(i)
-    #     ###Iterate over all neighbours of grid cell i
-    #     for x,y,z in ti.ndrange((-1,2),(-1,2),(-1,2)):
-    #         current_grid = grid_idx + self.convert_grid_ix(x,y,z)
-    #         if max(0, current_grid) == 0 : continue
-    #         if self.num_grid_cells - 1 == min(self.num_grid_cells - 1, current_grid) : continue
-    #         for j in range(self.grid_num_particles[current_grid]):
-    #             p_j = self.grid[current_grid, j] # Get point idx
-    #             if i != j and (self.position[i] - self.position[p_j]).norm() < self.smoothing_radius:
-    #                 func(i, p_j, ret)
+    @ti.func
+    def for_all_neighbors(self, i, func : ti.template(), ret : ti.template()):
+        '''
+            Only iterates over 1 neighbours of grid cell i to find the points in the neighbourhood..
+            A slow function because:, 
+                -can't be parallelized.
+                -if checks are not static.
+        '''
+        grid_idx = self.to_grid_idx(i)
+        ###Iterate over all neighbours of grid cell i
+        for x,y,z in ti.ndrange((-1,2),(-1,2),(-1,2)):
+            current_grid = grid_idx + self.convert_grid_ix(x,y,z)
+            if max(0, current_grid) == 0 : continue
+            if self.grid_size - 1 == min(self.grid_size - 1, current_grid) : continue
+            for j in range(self.grid_num_particles[current_grid]):
+                p_j = self.grid[current_grid, j] # Get point idx
+                if i[0] != j and (self.position[i] - self.position[p_j]).norm() < self.smoothing_radius:
+                    func(i, p_j, ret)
     
     # def sum_all_negihbours(self, i, func : ti.template(), ret : ti.template()):
     #     '''
@@ -245,14 +248,15 @@ class ParticleSystem:
     #             if i != j and (self.position[i] - self.position[p_j]).norm() < self.smoothing_radius:
     #                 func(i, p_j, ret)
 
-    @ti.func
-    def for_all_neighbors(self, i, func: ti.template(), retval: ti.template()):
-        center = self.pos_to_index(self.position[i])
-        for cell_offset in ti.grouped(ti.ndrange(*((-1, 2),) * self.dim)):
-            grid_index = self.flatten_grid_index(center + cell_offset)
-            for j in range(self.grid_particles_num[ti.max(0, grid_index - 1)], self.grid_particles_num[grid_index]):
-                if i[0] != j and (self.position[i] - self.position[j]).norm() < self.smoothing_radius:
-                    func(i, j, retval)
+    # 2nd grid:
+    # @ti.func
+    # def for_all_neighbors(self, i, func: ti.template(), retval: ti.template()):
+    #     center = self.pos_to_index(self.position[i])
+    #     for cell_offset in ti.grouped(ti.ndrange(*((-1, 2),) * self.dim)):
+    #         grid_index = self.flatten_grid_index(center + cell_offset)
+    #         for j in range(self.grid_particles_num[ti.max(0, grid_index - 1)], self.grid_particles_num[grid_index]):
+    #             if i[0] != j and (self.position[i] - self.position[j]).norm() < self.smoothing_radius:
+    #                 func(i, j, retval)
 
     # @ti.func
     # def find_neighbors_as_list(self, i):
