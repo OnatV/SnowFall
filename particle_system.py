@@ -36,6 +36,8 @@ class ParticleSystem:
         self.scene = ti.ui.Scene()
         self.camera = ti.ui.Camera()
         self.camera.position(-7.5, 2.5, 2.5)
+        self.camera.up(0.0, 1.0, 0.0)
+        self.camera.lookat(2.5, 2.5, 2.5)
         self.initalize_domain_viz()
 
     def allocate_fields(self):
@@ -66,7 +68,7 @@ class ParticleSystem:
         self.grid_new = ti.field(dtype=int, shape=(self.grid_size, self.max_particles_per_cell))   ##Holds the indices of partices at grid points
         self.grid_num_particles = ti.field(dtype=int, shape=(self.grid_size))  ##Holds the number of particles at each grid point
         self.particle_to_grid = ti.field(dtype=int, shape=self.num_particles)        ##Holds the grid point index of each particle, currently not needed because we
-
+        self.padding = self.grid_spacing
         # #2nd grid:
         # ## allocate memory for the grid
         # self.grid_particles_num = ti.field(int, shape=(self.grid_size_x * self.grid_size_y * self.grid_size_z))
@@ -266,7 +268,7 @@ class ParticleSystem:
 
 
     def visualize(self):
-        self.camera.track_user_inputs(self.window, movement_speed=0.03, hold_key=ti.ui.RMB)
+        self.camera.track_user_inputs(self.window, movement_speed=0.0003, hold_key=ti.ui.RMB)
         self.scene.set_camera(self.camera)
         self.scene.ambient_light((0.8, 0.8, 0.8))
         self.draw_domain()
@@ -306,6 +308,6 @@ class ParticleSystem:
         self.scene.lines(vertices=self.vertices, indices=self.indices, width=1.0)
 
     def draw_particles(self):
-        self.scene.particles(self.position, color = (0.99, 0.99, 0.99), radius = self.particle_radius)
+        self.scene.particles(self.position, color = (0.99, 0.0, 0.99), radius = self.smoothing_radius)
 
 

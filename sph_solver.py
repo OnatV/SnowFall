@@ -81,17 +81,17 @@ class SnowSolver:
     def enforce_boundary_3D(self):
         for i in range(self.ps.num_particles):
             if self.ps.position[i].x < self.ps.domain_start[0]:
-                self.ps.position[i].x = self.ps.domain_start[0]
+                self.ps.position[i].x = self.ps.domain_start[0] + self.ps.padding
             if self.ps.position[i].y < self.ps.domain_start[1]:
-                self.ps.position[i].y = self.ps.domain_start[1]
+                self.ps.position[i].y = self.ps.domain_start[1] + self.ps.padding
             if self.ps.position[i].z < self.ps.domain_start[2]:
-                self.ps.position[i].z = self.ps.domain_start[2]
+                self.ps.position[i].z = self.ps.domain_start[2] + self.ps.padding
             if self.ps.position[i].x > self.ps.domain_end[0]:
-                self.ps.position[i].x = self.ps.domain_end[0]
+                self.ps.position[i].x = self.ps.domain_end[0] - self.ps.padding
             if self.ps.position[i].y > self.ps.domain_end[1]:
-                self.ps.position[i].y = self.ps.domain_end[1]
+                self.ps.position[i].y = self.ps.domain_end[1] - self.ps.padding
             if self.ps.position[i].z > self.ps.domain_end[2]:
-                self.ps.position[i].z = self.ps.domain_end[2]
+                self.ps.position[i].z = self.ps.domain_end[2] - self.ps.padding
 
     @ti.func
     def cubic_kernel(self, r_norm):
@@ -153,14 +153,17 @@ class SnowSolver:
         d +=  self.cubic_kernel(rnorm) * ti.cast(self.ps.m_k, ti.f32)
 
     @ti.func
+    def compute_lame_parameters(self,i):
+        # for i in ti.grouped(self.ps.position):
+            self.ps.lambda_t_i[i] = 2000
+
+    @ti.func
     def compute_rest_density(self, i):
         # first the density is computed, then
-        # the rest density is derived
-        
+        # the rest density is derived        
         density_i = ti.Vector([0.0])
         self.ps.for_all_neighbors(i, self.calc_density, density_i)
         self.ps.density[i] = density_i
-
         # old code
         #for j in range(self.ps.num_particles):
         #    w_ij = self.kernel_lookup(ti.Vector.norm(x_i - self.ps.position[j]))
@@ -182,7 +185,7 @@ class SnowSolver:
     def compute_A_p(self, i, deltaTime, density:ti.template()):
         deltaTime2 = deltaTime * deltaTime
         self.ps.pressure_laplacian[i] = 0.0
-        grad_p = self.ps.pressure_gradient[i]
+        # grad_p = self.ps.pressure_gradient[i]
         lp = 0.0
         self.ps.for_all_neighbors(i, self.helper_diff_of_pressure_grad, lp)
         lp2 = 0.0
@@ -193,7 +196,9 @@ class SnowSolver:
         aii = self.ps.jacobian_diagonal[i]
         residuum = self.ps.rest_density[i] - self.ps.p_star[i] - A_p
         # self.ps.density_error[i] = -residuum
-        density += residuum 
+        pi = (0.5 / ti.math.max(aii, 0.00001) * residuum)
+        self.ps.pressure[i] += pi[0]
+        density -= residuum 
 
     @ti.func
     def helper_diff_of_pressure_grad(self, i, j, sum:ti.template()):
@@ -273,8 +278,6 @@ class SnowSolver:
     
     @ti.kernel
     def compute_a_lambda(self):
-        print("density", self.ps.density[0])
-        print("pgrad", self.ps.pressure_gradient[0])
         for i in ti.grouped(self.ps.position):
             if self.ps.density[i][0] == 0.0:
                 continue
@@ -291,7 +294,7 @@ class SnowSolver:
             avg_density_error = self.implicit_pressure_solver_step(deltaTime)
             if avg_density_error < 0.1:
                 is_solved = True 
-                print("Converged")
+                # print("Converged")
             it = it + 1
 
     def solve_a_lambda(self, deltaTime):
@@ -351,12 +354,15 @@ class SnowSolver:
     @ti.kernel
     def compute_internal_forces(self):
         #ti.loop_config(serialize=True)
+        # print("before", self.ps.density[0])
         for i in ti.grouped(self.ps.position):
             self.compute_rest_density(i)
+            self.compute_lame_parameters(i)
             self.compute_correction_matrix(i)
             self.compute_accel_ext(i)
             self.compute_accel_friction(i)
             #print("\r",  i, end="")
+        # print("after", self.ps.density[0])
 
     @ti.kernel
     def integrate_deformation_gradient(self, deltaTime:float):
