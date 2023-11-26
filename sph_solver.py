@@ -155,7 +155,7 @@ class SnowSolver:
     @ti.func
     def compute_lame_parameters(self,i):
         # for i in ti.grouped(self.ps.position):
-            self.ps.lambda_t_i[i] = 2000
+            self.ps.lambda_t_i[i] = 20
 
     @ti.func
     def compute_rest_density(self, i):
@@ -289,10 +289,11 @@ class SnowSolver:
         is_solved = False
         it = 0
         # print("here")
+        max_error = 0.01
         avg_density_error = 0.0
         while ((~is_solved or it < min_iterations) and it < max_iterations):
             avg_density_error = self.implicit_pressure_solver_step(deltaTime)
-            if avg_density_error < 0.1:
+            if avg_density_error < 10 * max_error:
                 is_solved = True 
                 # print("Converged")
             it = it + 1
