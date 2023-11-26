@@ -8,7 +8,7 @@ class SnowConfig:
         num_particles: int = 10000,
         gravity: np.array = np.array([0.0, -9.81, 0.0]),
         wind_direction : np.array = np.array([0.0, 0.0, -1.0]),
-        domain_size: np.array = np.array([5.0, 5.0, 5.0]), # domain lower corner is at 0,0,0
+        domain_size: np.array = np.array([2.0, 5.0, 5.0]), # domain lower corner is at 0,0,0
         deltaTime = 0.001
     ) -> None:
         self.num_particles = num_particles
@@ -22,4 +22,6 @@ class SnowConfig:
 
         self.theta_c = 0
         self.theta_s = 1
+
+        self.enable_wind = False
         

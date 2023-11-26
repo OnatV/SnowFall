@@ -19,6 +19,8 @@ class ParticleSystem:
         self.smoothing_radius = self.particle_radius * 4.0
         self.wind_direction = ti.Vector(self.cfg.wind_direction)
 
+        self.enable_wind = config.enable_wind
+
         self.grid_spacing = self.cfg.grid_spacing
         # self.grid_size= self.cfg.grid_size
         # self.num_grid_cells = int(self.cfg.grid_size ** 3)
@@ -27,6 +29,7 @@ class ParticleSystem:
         # allocate memory
         self.allocate_fields()
         self.initialize_fields()
+        print("Creating Grid")
         self.update_grid()
         print("Built grid")
         print(self.position[0])
@@ -103,9 +106,9 @@ class ParticleSystem:
         print("initilizing particle positions...")
         for i in range(self.num_particles):
             # set it so that it fills up most of the default domain size, should be done more cleverly in the future
-            x = 4 * ti.random(dtype=float) + 0.5
-            y = 4 * ti.random(dtype=float) + 0.5
-            z = 4 * ti.random(dtype=float) + 0.5
+            x = (self.domain_size[0] - 1) * ti.random(dtype=float) + 0.5
+            y = (self.domain_size[1] - 1)  * ti.random(dtype=float) + 0.5
+            z = (self.domain_size[2] - 1)  * ti.random(dtype=float) + 0.5
             self.position[i] = ti.Vector([x, y, z])
         print("Intialized!")
 
@@ -163,11 +166,23 @@ class ParticleSystem:
     #     for i in ti.grouped(self.grid_particles_num):
     #         self.grid_particles_num_swap[i] = self.grid_particles_num[i]
 
-    @ti.kernel
+
     def update_grid(self):
+        ##First remove all particles from grid
+        self.update_grid1()
+        self.update_grid2()
+        print("Done with update")
+    
+    @ti.kernel
+    def update_grid1(self):
         ##First remove all particles from grid
         for i in range(self.grid_size):
             self.grid_num_particles[i] = 0
+        # print("Done with update")
+    
+    @ti.kernel
+    def update_grid2(self):
+        ##First remove all particles from grid
         for i in range(self.num_particles):   
             grid_idx = self.to_grid_idx(i)
             if self.grid_num_particles[grid_idx] >= self.max_particles_per_cell:
@@ -175,8 +190,8 @@ class ParticleSystem:
             self.grid[grid_idx, self.grid_num_particles[grid_idx]] = i
             self.grid_num_particles[grid_idx] += 1
             self.particle_to_grid[i] = grid_idx
-        print("Done with update")
-    
+
+
     # this function converts a particle to a grid index
     @ti.func
     def to_grid_idx(self, i):
@@ -184,9 +199,9 @@ class ParticleSystem:
             @TODO: This function assumes grid_size is larger 
         '''
         p = self.position[i]
-        x = p.x // self.grid_spacing
-        y = p.y // self.grid_spacing
-        z = p.z // self.grid_spacing
+        x = ti.math.floor(p.x / self.grid_spacing)
+        y = ti.math.floor(p.y / self.grid_spacing)
+        z = ti.math.floor(p.z / self.grid_spacing)
 
         return self.convert_grid_ix(x,y,z)
     
@@ -195,20 +210,20 @@ class ParticleSystem:
 
         ##This ensures the indices are always correct, 
         # but out of bounds indices overflow
-        x_ = x % self.grid_size_x
-        y_ = y % self.grid_size_y
-        z_ = z % self.grid_size_z
-
-        return int(x_ + y_ * self.grid_size_y + z_ * self.grid_size_y * self.grid_size_z)
+        x_ = ti.math.clamp(ti.math.mod(x , self.grid_size_x), 0 , self.grid_size_x - 1)
+        y_ = ti.math.clamp(ti.math.mod(y , self.grid_size_y), 0 , self.grid_size_y - 1)
+        z_ = ti.math.clamp(ti.math.mod(z , self.grid_size_z), 0 , self.grid_size_z - 1)
+        idx = ti.cast((x_ + y_ * self.grid_size_y + z_ * self.grid_size_y * self.grid_size_z), int)
+        return ti.math.clamp(idx, 0, self.grid_size - 1)
 
     # takes a grid index and converts it to a 3D index
     # this probably can and should be precomputed
-    @ti.func
-    def grid_ind_to_ijk(self, n):
-        i = n % self.grid_size_x
-        j = (i / self.grid_size_x) % self.grid_size_x
-        k = i / (self.grid_size_x * self.grid_size_x)
-        return (i, j, k)
+    # @ti.func
+    # def grid_ind_to_ijk(self, n):
+    #     i = n % self.grid_size_x
+    #     j = (i / self.grid_size_x) % self.grid_size_x
+    #     k = i / (self.grid_size_x * self.grid_size_x)
+    #     return (i, j, k)
     
     @ti.func
     def for_all_neighbors(self, i, func : ti.template(), ret : ti.template()):
@@ -226,7 +241,7 @@ class ParticleSystem:
             if self.grid_size - 1 == min(self.grid_size - 1, current_grid) : continue
             for j in range(self.grid_num_particles[current_grid]):
                 p_j = self.grid[current_grid, j] # Get point idx
-                if i[0] != j and (self.position[i] - self.position[p_j]).norm() < self.smoothing_radius:
+                if i[0] != p_j and (self.position[i] - self.position[p_j]).norm() < self.smoothing_radius:
                     func(i, p_j, ret)
     
     # def sum_all_negihbours(self, i, func : ti.template(), ret : ti.template()):
