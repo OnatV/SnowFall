@@ -21,7 +21,8 @@ class SnowSolver:
         # self.a_lambda = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         # self.a_G = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         # self.a_other = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
-        self.wind_enabled = True
+        self.wind_enabled = ps.enable_wind
+        self.numerical_eps = 1e-6
         self.init_kernel_lookup()
 
     def init_kernel_lookup(self, table_size = 100, grad_table_size = 100):
@@ -139,12 +140,17 @@ class SnowSolver:
     
     @ti.kernel
     def integrate_velocity(self, deltaTime: float):
+        '''
+            Computes step 8-9 from Algorithm 1 in the paper.
+        '''
+
         for i in range(self.ps.num_particles):
             self.ps.velocity[i] = self.ps.velocity[i] + (deltaTime * self.ps.acceleration[i])
 
     @ti.kernel
     def update_position(self, deltaTime: float):
         for i in range(self.ps.num_particles):
+            # self.ps.position_0[i] = self.ps.position[i]
             self.ps.position[i] = self.ps.position[i] + deltaTime * self.ps.velocity[i]
 
     @ti.func
@@ -159,6 +165,11 @@ class SnowSolver:
 
     @ti.func
     def compute_rest_density(self, i):
+        '''
+            Step 2 in Algorithm 1 in the paper.
+            
+            Computes ro_0_i^t, the rest density of particle i at time t. 
+        '''
         # first the density is computed, then
         # the rest density is derived        
         density_i = ti.Vector([0.0])
@@ -175,7 +186,7 @@ class SnowSolver:
     #calculate V_i = m_i / density_i
     @ti.func
     def get_volume(self, i):
-        return (self.ps.m_k / self.ps.density[i])[0]
+        return (self.ps.m_k / ti.math.max(self.ps.density[i], self.numerical_eps ) )[0]
 
     @ti.func
     def divergence_discretization(self, i, k, sum:ti.template()):
@@ -196,7 +207,7 @@ class SnowSolver:
         aii = self.ps.jacobian_diagonal[i]
         residuum = self.ps.rest_density[i] - self.ps.p_star[i] - A_p
         # self.ps.density_error[i] = -residuum
-        pi = (0.5 / ti.math.max(aii, 0.00001) * residuum)
+        pi = (0.5 / ti.math.max(aii, self.numerical_eps) * residuum)
         self.ps.pressure[i] += pi[0]
         density -= residuum 
 
@@ -281,7 +292,7 @@ class SnowSolver:
         for i in ti.grouped(self.ps.position):
             if self.ps.density[i][0] == 0.0:
                 continue
-            self.ps.acceleration[i] -= (1.0 / self.ps.density[i][0]) * self.ps.pressure_gradient[i]
+            self.ps.acceleration[i] -= (1.0 / ti.math.max(self.ps.density[i][0], self.numerical_eps)) * self.ps.pressure_gradient[i]
 
     def implicit_pressure_solve(self, deltaTime:float):
         max_iterations = 100
@@ -299,6 +310,10 @@ class SnowSolver:
             it = it + 1
 
     def solve_a_lambda(self, deltaTime):
+        '''
+            Computes Step 6 in Algorithm 1 in the paper.
+
+        '''
         # print("solve_alam")
         self.implicit_solver_prepare(deltaTime)
         self.implicit_pressure_solve(deltaTime)
@@ -306,6 +321,9 @@ class SnowSolver:
 
     @ti.func
     def aux_correction_matrix(self, i_idx, j_idx, res:ti.template()):
+        '''
+            Helper of self.compute_correction_matrix
+        '''
         x_ij = self.ps.position[i_idx] - self.ps.position[j_idx] # x_ij: vec3
         w_ij = self.cubic_kernel_derivative(x_ij)
         v_j = self.get_volume(j_idx)
@@ -314,6 +332,16 @@ class SnowSolver:
 
     @ti.func
     def compute_correction_matrix(self, i):
+        '''
+            Step 3 in Algorithm 1 in the paper.
+
+            Computes L_i as defined in the paper. 
+            
+            If os.is_pseudo_L_i[i] is true, 
+                use L_i = pseudo_correction_matrix[i]
+            else
+                use L_i = correction_matrix[i]
+        '''
         x_i = self.ps.position[i]
         self.ps.is_pseudo_L_i[i] = False
         tmp_i = ti.Matrix.zero(dt=float, n=3, m=3)
@@ -335,9 +363,18 @@ class SnowSolver:
 
     @ti.func
     def compute_accel_ext(self, i):
-        ##Strength equal to the position of the particle in the direction
-        flow_strength = self.ps.position[i].dot(self.ps.wind_direction)
-        self.ps.acceleration[i] = self.ps.gravity + self.ps.wind_direction * flow_strength
+        '''
+            Computes Step 4 in Algorithm 1 in the paper.
+
+            Computes a_{i}^{other,t}, the acceleration due to gravity, adhesion, and external forces.
+        '''
+
+        ##Wind Strength equal to the position of the particle in the direction
+        wind_acc = ti.Vector([0.0, 0.0, 0.0])
+        if ti.static(self.wind_enabled):
+            wind_acc += self.ps.wind_direction * self.ps.position[i].dot(self.ps.wind_direction)
+
+        self.ps.acceleration[i] = self.ps.gravity + wind_acc
 
     @ti.func
     def compute_flow(self, i):
@@ -354,23 +391,89 @@ class SnowSolver:
 
     @ti.kernel
     def compute_internal_forces(self):
+        '''
+            Computes for loop 1 in Algorithm 1 in the paper.
+                Steps:
+                    Step 2 : self.compute_rest_density(i)
+                    Step 3 : self.compute_correction_matrix(i)
+                    Step 4 : self.compute_accel_ext(i)
+                    Step 5 : self.compute_accel_friction(i)
+        '''
         #ti.loop_config(serialize=True)
         # print("before", self.ps.density[0])
         for i in ti.grouped(self.ps.position):
-            self.compute_rest_density(i)
-            self.compute_lame_parameters(i)
-            self.compute_correction_matrix(i)
-            self.compute_accel_ext(i)
-            self.compute_accel_friction(i)
+            self.compute_rest_density(i) #Step 2
+            self.compute_lame_parameters(i) ##Don't get what this is doing
+            self.compute_correction_matrix(i) #Step 3
+            self.compute_accel_ext(i) #Step 4
+            self.compute_accel_friction(i) #Step 5
             #print("\r",  i, end="")
         # print("after", self.ps.density[0])
 
     @ti.kernel
     def integrate_deformation_gradient(self, deltaTime:float):
-        pass
-        # for i in range(self.ps.num_particles):
-        #     self.ps.deformation_gradient[i] = self.ps.deformation_gradient[i] + deltaTime * self.ps.velocity[i]
-        #     self.ps.deformation_gradient[i] = self.clamp_deformation_gradients(self.ps.deformation_gradient[i])
+        '''
+            Calculates steps 10-11 in Algorithm 1 in the paper.
+        '''
+
+        for i in ti.grouped(self.ps.position):
+            
+            vel_grad = self.compute_velocity_gradient(i) 
+            un_clamped = self.ps.deformation_gradient[i] + deltaTime * vel_grad * self.ps.deformation_gradient[i]
+            self.ps.deformation_gradient[i] = self.clamp_deformation_gradients(un_clamped)
+
+    @ti.func
+    def compute_velocity_gradient(self,i):
+
+
+        ##Currently only computes the gradient using snow particles, ie no boundary Eq.17
+        grad_v_i_s_prime = ti.Matrix.zero(dt=float, n=3, m=3)
+        self.ps.for_all_neighbors(i, self.helper_compute_velocity_gradient_uncorrected, grad_v_i_s_prime)
+
+        # grad_v_i_s_tilde = ti.Matrix.zero(dt=float, n=3, m=3)
+        # self.ps.for_all_neighbors(i, self.helper_compute_velocity_gradient_corrected, grad_v_i_s_tilde)
+        grad_v_i_s_tilde = ti.Matrix.zero(dt=float, n=3, m=3)
+        
+        V_i_prime = grad_v_i_s_prime.trace() * ti.Matrix.identity(float, 3) / 3
+        R_i_tilde = (grad_v_i_s_tilde - grad_v_i_s_tilde.transpose()) / 2 
+        S_i_tilde = (grad_v_i_s_tilde + grad_v_i_s_tilde.transpose()) / 2 - grad_v_i_s_tilde.trace() * ti.Matrix.identity(float, 3) / 3
+
+        return V_i_prime + R_i_tilde + S_i_tilde
+    
+    @ti.func
+    def helper_compute_velocity_gradient_corrected(self, i_idx, j_idx, res:ti.template()):
+        '''
+            Helper of self.compute_correction_matrix. 
+            Needs to be separated for boundary in snow in the future.
+        '''
+        v_j = self.ps.velocity[j_idx]
+        v_i = self.ps.velocity[i_idx]
+        x_ij = self.ps.position[i_idx] - self.ps.position[j_idx]
+        V_j = self.get_volume(j_idx)
+
+        if self.ps.is_pseudo_L_i[i_idx]:
+            L_i = self.ps.pseudo_correction_matrix[i_idx]
+        else:
+            L_i = self.ps.correction_matrix[i_idx]
+
+        del_w_ij = self.cubic_kernel_derivative(x_ij)
+        corrected_del_w_ij = L_i @ del_w_ij
+
+        res += (v_j - v_i).outer_product(V_j * corrected_del_w_ij)
+
+    @ti.func
+    def helper_compute_velocity_gradient_uncorrected(self, i_idx, j_idx, res:ti.template()):
+        '''
+            Helper of self.compute_correction_matrix. 
+            Needs to be separated for boundary in snow in the future.
+        '''
+        v_j = self.ps.velocity[j_idx] # v_j: vec3
+        v_i = self.ps.velocity[i_idx] # v_i: vec3
+        x_ij = self.ps.position[i_idx] - self.ps.position[j_idx] # x_ij: vec3
+        del_w_ij = self.cubic_kernel_derivative(x_ij) # del_w_ij: vec3
+        V_j = self.get_volume(j_idx) # V_j: float
+
+        res += (v_j - v_i).outer_product(V_j * del_w_ij)
 
     @ti.func
     def clamp_deformation_gradients(self, matrix):
@@ -397,21 +500,17 @@ class SnowSolver:
         # foreach particle i do
         #   integrate positison x (see self.update_position)
         # self.ps.gravity = set to zero
-        if self.snow_implemented:
+        if ti.static(self.snow_implemented):
             # these functions should update the acceleration field of the particles
-            self.compute_internal_forces()
+            self.compute_internal_forces() # Step 1, includes Steps 2-5
             # print("before solve a")
-            self.solve_a_lambda(deltaTime)
-            # self.solve_a_G()
-            self.integrate_velocity(deltaTime)
-            self.integrate_deformation_gradient(deltaTime)
-
-        elif self.wind_enabled:
-            self.compute_external_forces_only(deltaTime)
-            self.integrate_velocity(deltaTime)
+            self.solve_a_lambda(deltaTime) # Step 6
+            # self.solve_a_G()             #Step 7 
+            self.integrate_velocity(deltaTime) # Step 8-9
+            self.integrate_deformation_gradient(deltaTime) #Step 10-11
 
         else:
-            self.simple_gravity_accel()
+            self.compute_external_forces_only(deltaTime)
             self.integrate_velocity(deltaTime)
         # these last steps are the same regardless of solver type
         self.update_position(deltaTime)
