@@ -369,7 +369,7 @@ class SnowSolver:
         '''
 
         ##Wind Strength equal to the position of the particle in the direction
-        wind_acc = 0
+        wind_acc = ti.Vector([0.0, 0.0, 0.0])
         if ti.static(self.wind_enabled):
             wind_acc += self.ps.wind_direction * self.ps.position[i].dot(self.ps.wind_direction)
 
