@@ -19,7 +19,7 @@ class ParticleSystem:
         self.smoothing_radius = self.particle_radius * 4.0
         self.wind_direction = ti.Vector(self.cfg.wind_direction)
 
-        self.enable_wind = config.enable_wind
+        self.enable_wind = True
 
         self.grid_spacing = self.smoothing_radius * 2
         # self.grid_size= self.cfg.grid_size
@@ -75,7 +75,7 @@ class ParticleSystem:
         self.padding = self.grid_spacing
 
         # boundary particles
-        self.boundary_particles = ti.Vector.field(self.dim, shape=self.num_particles)
+        # self.boundary_particles = ti.Vector.field(self.dim, shape=self.num_particles)
 
         self.velocity_star = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles) #@@
         # #2nd grid:
@@ -112,12 +112,9 @@ class ParticleSystem:
         print("initilizing particle positions...")
         for i in range(self.num_particles):
             # set it so that it fills up most of the default domain size, should be done more cleverly in the future
-            #x = (self.domain_size[0] - 1) * ti.random(dtype=float) + 0.5
-            #y = (self.domain_size[1] - 1)  * ti.random(dtype=float) + 0.5
+            x = (self.domain_size[0] - 1) * ti.random(dtype=float) + 0.5
+            y = (self.domain_size[1] - 1)  * ti.random(dtype=float) + 0.5
             z = (self.domain_size[2] - 1)  * ti.random(dtype=float) + 0.5
-            # put all on a line -> to test 1d case
-            x = 2.5
-            y = 2.5
             self.position[i] = ti.Vector([x, y, z])
         print("Intialized!")
 

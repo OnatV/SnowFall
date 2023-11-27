@@ -229,7 +229,7 @@ class SnowSolver:
     @ti.func
     def helper_diff_of_pressure_grad(self, i, j, sum:ti.template()):
         sum += self.get_volume(j) * (self.ps.pressure_gradient[j] - self.ps.pressure_gradient[i]).dot(self.cubic_kernel_derivative(
-            self.ps.position[i] - self.ps.position[j])
+            self.ps.position[j] - self.ps.position[i])
         )
 
     @ti.func
@@ -244,16 +244,16 @@ class SnowSolver:
     @ti.func
     def helper_sum_of_pressure(self, i, j, sum:ti.template()):
         sum += (self.ps.pressure_old[j] + self.ps.pressure_old[i]) * self.get_volume(j) * self.cubic_kernel_derivative(
-            self.ps.position[i] - self.ps.position[j]
+            self.ps.position[j] - self.ps.position[i]
         )
 
     @ti.func
     def helper_volume_squared_sum(self, i, j, sum: ti.template()):
-        sum += self.get_volume(i) * self.get_volume(j) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[j]).norm_sqr()
+        sum += self.get_volume(i) * self.get_volume(j) * self.cubic_kernel_derivative(self.ps.position[j] - self.ps.position[i]).norm_sqr()
     
     @ti.func
     def helper_sum_over_j(self, i, j, sum:ti.template()):
-        sum += self.get_volume(j) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[j])
+        sum += self.get_volume(j) * self.cubic_kernel_derivative(self.ps.position[j] - self.ps.position[i])
 
     @ti.func
     def helper_sum_over_b(self, i, b, sum:ti.template()):
@@ -342,7 +342,7 @@ class SnowSolver:
         avg_density_error_prev = 0.0
         while ((~is_solved or it < min_iterations) and it < max_iterations):
             avg_density_error = self.implicit_pressure_solver_step(deltaTime)
-            print("avg_density_error", avg_density_error)
+            # print("avg_density_error", avg_density_error)
             if avg_density_error > avg_density_error_prev:
                 is_solved = None
                 break
@@ -351,7 +351,7 @@ class SnowSolver:
                 # print("Converged")
 
             it = it + 1
-            print("pressure", self.ps.pressure[0])
+            # print("pressure", self.ps.pressure[0])
 
         return is_solved
     def solve_a_lambda(self, deltaTime):
@@ -420,7 +420,7 @@ class SnowSolver:
             wind_acc += self.ps.wind_direction * self.ps.position[i].dot(self.ps.wind_direction)
 
         # remove gravity for now
-        self.ps.acceleration[i] = 0#self.ps.gravity + wind_acc
+        self.ps.acceleration[i] = self.ps.gravity 
 
     @ti.func
     def compute_flow(self, i):

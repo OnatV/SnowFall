@@ -4,6 +4,11 @@
     python main.py
     ```
 
+## dependencies
+- taichi
+- numpy
+- 
+
 ## Current Progress
 
 ![Dev Log](images/nov_04_js.png)
