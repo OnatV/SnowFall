@@ -11,18 +11,17 @@ class ParticleSystem:
         self.domain_size = self.cfg.domain_size
         self.num_particles = self.cfg.num_particles
         self.domain_end = self.domain_start + self.domain_size
-        self.particle_radius = 0.01 # move to config
+        self.particle_radius = self.cfg.particle_radius 
         self.boundary_particle_radius = 0.1 # move to config
         self.dim = 3 # 3D simulation
         self.gravity = ti.Vector(self.cfg.gravity)
         self.temperature = -10.0 # degrees Celsuis
         self.m_k = 0.0001 * (self.particle_radius ** self.dim) # particle mass
-        self.smoothing_radius = self.particle_radius * 4.0
+        self.smoothing_radius = self.cfg.smoothing_radius_ratio * self.particle_radius
         self.boundary_smoothing_radius = self.boundary_particle_radius * 4.0
         self.wind_direction = ti.Vector(self.cfg.wind_direction)
-
         self.enable_wind = True
-
+        self.initialize_type = self.cfg.initialize_type
         self.grid_spacing = self.smoothing_radius * 2
         # self.grid_size= self.cfg.grid_size
         # self.num_grid_cells = int(self.cfg.grid_size ** 3)
@@ -33,6 +32,8 @@ class ParticleSystem:
         self.initialize_fields()
         print("Creating Grid")
         self.update_grid()
+        # init once as long as boundaries are static
+        self.update_boundary_grid()
         print("Built grid")
         print(self.position[0])
         # for visualization
@@ -40,9 +41,9 @@ class ParticleSystem:
         self.canvas = self.window.get_canvas()
         self.scene = ti.ui.Scene()
         self.camera = ti.ui.Camera()
-        self.camera.position(-7.5, 2.5, 2.5)
+        self.camera.position(-self.domain_size[0] * 2, self.domain_size[1] / 2.0, self.domain_size[2] / 2.0)
         self.camera.up(0.0, 1.0, 0.0)
-        self.camera.lookat(2.5, 2.5, 2.5)
+        self.camera.lookat(self.domain_size[0] / 2.0, self.domain_size[1] / 2.0, self.domain_size[2] / 2.0)
         self.initalize_domain_viz()
 
     def allocate_fields(self):
@@ -54,7 +55,8 @@ class ParticleSystem:
         self.position = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.position_0 = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.pressure = ti.field(float, shape=self.num_particles)
-        self.pressure_old = ti.field(float, shape=self.num_particles)
+        # self.pressure_old = ti.field(float, shape=self.num_particles)
+        
         self.pressure_gradient = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.pressure_laplacian = ti.Vector.field(1, dtype=float, shape=self.num_particles)
         self.deformation_gradient = ti.Matrix.field(n=3, m=3, dtype=float, shape=self.num_particles) # an num_particles length array of 3x3 matrices
@@ -81,12 +83,12 @@ class ParticleSystem:
         self.bgrid_z = int(self.domain_size[2] / self.boundary_particle_radius)
         self.nBoundaryParticles = self.bgrid_x * self.bgrid_z
         self.boundary_particles = ti.Vector.field(self.dim, float,  shape=self.nBoundaryParticles)
+        self.boundary_particles_volume = ti.Vector.field(self.dim, float,  shape=self.nBoundaryParticles)
         # will be updated only when boundary moves
         self.boundary_grid = ti.field(dtype=int, shape=(self.grid_size, self.max_particles_per_cell))   ##Holds the indices of partices at grid points
         self.boundary_grid_num_particles = ti.field(dtype=int, shape=(self.grid_size))  ##Holds the number of particles at each grid point
-        # init once as long as boundaries are static
-        self.update_boundary_grid()
-
+        
+        
         self.velocity_star = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles) #@@
         # #2nd grid:
         # ## allocate memory for the grid
@@ -116,16 +118,39 @@ class ParticleSystem:
             [0, 1 + self.cfg.theta_s, 0],
             [0, 0, 1 + self.cfg.theta_s]
         ])
+        self.colors = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
 
-    @ti.kernel
+    def initialize_particle_block(self):
+        block_length = int(np.floor(np.cbrt(self.num_particles)))
+        print("Block length", block_length)
+        grid_origin = ((self.domain_end - self.domain_start) / 2.0) - ((self.particle_radius * block_length) / 2.0)
+        for i in range(self.num_particles):
+            self.position[i] = ti.Vector([0.0, 0.0, 0.0])
+        for i in range(block_length):
+            for j in range(block_length):
+                for k in range(block_length):
+                    x = i * (self.particle_radius - 3e-3) + grid_origin[0]
+                    y = j * (self.particle_radius - 3e-3) + grid_origin[1]
+                    z = k * (self.particle_radius - 3e-3) + grid_origin[2]
+                    self.position[i * block_length * block_length + j * block_length + k] = ti.Vector([x, y, z])
+
+
+    def initialize_random_particles(self):
+        for i in range(self.num_particles):
+                x = (self.domain_size[0] - 1) * ti.random(dtype=float) + 0.5
+                y = (self.domain_size[1] - 1)  * ti.random(dtype=float) + 0.5
+                z = (self.domain_size[2] - 1)  * ti.random(dtype=float) + 0.5
+                self.position[i] = ti.Vector([x, y, z])
+
     def initialize_fields(self):
         print("initializing particle positions...")
+        if self.initialize_type == 'block':
+            self.initialize_particle_block()
+        else:
+            self.initialize_random_particles            
         for i in range(self.num_particles):
-            # set it so that it fills up most of the default domain size, should be done more cleverly in the future
-            x = (self.domain_size[0] - 1) * ti.random(dtype=float) + 0.5
-            y = (self.domain_size[1] - 1)  * ti.random(dtype=float) + 0.5
-            z = (self.domain_size[2] - 1)  * ti.random(dtype=float) + 0.5
-            self.position[i] = ti.Vector([x, y, z])
+            self.pressure[i] = 0.0
+            self.colors[i] = ti.Vector([1.0, 1.0, 1.0])
         boundary_plane_num_z_dir = self.bgrid_z
         boundary_plane_num_x_dir = self.bgrid_x        
         for i in range(self.nBoundaryParticles):
@@ -134,6 +159,8 @@ class ParticleSystem:
             z = float(i % boundary_plane_num_z_dir) / (boundary_plane_num_z_dir - 1) * self.domain_size[2]
             self.boundary_particles[i] = ti.Vector([x, y, z])
         print("Intialized!")
+
+    
 
     # def cumsum_indx(self):
     #     np_arr = np.cumsum(self.grid_particles_num.to_numpy())
@@ -211,19 +238,41 @@ class ParticleSystem:
             self.grid[grid_idx, self.grid_num_particles[grid_idx]] = i
             self.grid_num_particles[grid_idx] += 1
             self.particle_to_grid[i] = grid_idx
+
+    @ti.func
+    def set_neighbor_color(self, i, j, color):
+        self.colors[i] = color
+        self.colors[j] = color
+
+    @ti.kernel
+    def color_neighbors(self, i:int):
+        color = ti.Vector([1.0, 0.0, 0.0])
+        self.for_all_neighbors(ti.Vector([i]), self.set_neighbor_color, color)
     
     @ti.kernel
     def update_boundary_grid(self):
         for b in range(self.nBoundaryParticles):
             self.boundary_grid_num_particles[b] = 0
         for b in range(self.nBoundaryParticles):
-            grid_idx = self.to_grid_idx(b)
+            grid_idx = self.to_grid_b_idx(b)
             if self.boundary_grid_num_particles[grid_idx] >= self.max_particles_per_cell:
                 continue
             self.boundary_grid[grid_idx, self.boundary_grid_num_particles[grid_idx]] = b
             self.boundary_grid_num_particles[grid_idx] += 1
             #self.particle_to_grid[b] = grid_idx
 
+    # this function converts a particle to a grid index
+    @ti.func
+    def to_grid_b_idx(self, i):
+        '''
+            @TODO: This function assumes grid_size is larger 
+        '''
+        p = self.boundary_particles[i]
+        x = ti.math.floor(p.x / self.grid_spacing)
+        y = ti.math.floor(p.y / self.grid_spacing)
+        z = ti.math.floor(p.z / self.grid_spacing)
+
+        return self.convert_grid_ix(x,y,z)
 
     # this function converts a particle to a grid index
     @ti.func
@@ -285,7 +334,7 @@ class ParticleSystem:
                 -can't be parallelized.
                 -if checks are not static.
         '''
-        grid_idx = self.to_grid_idx(i)
+        grid_idx = self.to_grid_b_idx(i)
         ###Iterate over all neighbours of grid cell i
         for x,y,z in ti.ndrange((-1,2),(-1,2),(-1,2)):
             current_grid = grid_idx + self.convert_grid_ix(x,y,z)
@@ -293,7 +342,7 @@ class ParticleSystem:
             if self.grid_size - 1 == min(self.grid_size - 1, current_grid) : continue
             for j in range(self.boundary_grid_num_particles[current_grid]):
                 p_j = self.boundary_grid[current_grid, j] # Get point idx
-                if i[0] != p_j and (self.position[i] - self.position[p_j]).norm() < self.smoothing_radius:
+                if i[0] != p_j and (self.position[i] - self.boundary_particles[p_j]).norm() < self.smoothing_radius:
                     func(i, p_j, ret)
 
     # def sum_all_negihbours(self, i, func : ti.template(), ret : ti.template()):
@@ -375,8 +424,8 @@ class ParticleSystem:
         self.scene.lines(vertices=self.vertices, indices=self.indices, width=1.0)
 
     def draw_particles(self):
-        self.scene.particles(self.position, color = (0.99, 0.0, 0.99), radius = self.smoothing_radius)
-        self.scene.particles(self.boundary_particles, color = (0.99, 0.99, 0.99),
-                              radius = self.boundary_particle_radius)
+        self.scene.particles(self.position, color = (0.99, 0.99, 0.99), radius = 0.5 * self.particle_radius, per_vertex_color=self.colors)
+        self.scene.particles(self.boundary_particles, color = (0.4, 0.4, 0.4),
+                              radius = 0.5 * self.boundary_particle_radius)
 
 
