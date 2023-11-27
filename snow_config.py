@@ -24,5 +24,5 @@ class SnowConfig:
         self.theta_c = 0.025
         self.theta_s = 0.0075
 
-        self.enable_wind = True
+        self.enable_wind = False
         

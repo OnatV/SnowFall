@@ -201,28 +201,30 @@ class SnowSolver:
 
     @ti.func
     def divergence_discretization(self, i, k, sum:ti.template()):
-        sum += self.get_volume(k) * (self.ps.velocity[k] - self.ps.velocity[i]).dot(self.cubic_kernel_derivative(self.ps.position[i]-self.ps.position[k]))
+
+
+        sum += self.get_volume(k) * (self.ps.velocity_star[k] - self.ps.velocity_star[i]).dot(self.cubic_kernel_derivative(self.ps.position[i]-self.ps.position[k]))
 
     # consider: https://en.wikipedia.org/wiki/Jacobi_method
     @ti.func
-    def compute_A_p(self, i, deltaTime, density:ti.template()):
+    def compute_A_p(self, i, deltaTime, density_error:ti.template()):
         deltaTime2 = deltaTime * deltaTime
         self.ps.pressure_laplacian[i] = 0.0
         # grad_p = self.ps.pressure_gradient[i]
-        lp = 0.0
-        self.ps.for_all_neighbors(i, self.helper_diff_of_pressure_grad, lp)
-        lp2 = 0.0
+        lp_i = 0.0
+        self.ps.for_all_neighbors(i, self.helper_diff_of_pressure_grad, lp_i)
+        # lp2 = 0.0
         # self.ps.for_all_neighbors(i, self.helper_sum_over_b, lp2)
-        self.ps.pressure_laplacian[i] = lp + 1.5 * lp2
+        # self.ps.pressure_laplacian[i] = lp + 1.5 * lp2
         # now compute Ap
-        # livio: i'm really unsure what A_p really is
-        A_p = deltaTime2 * self.ps.pressure_laplacian[i]
+
+        A_p = -self.ps.rest_density[i] / self.ps.lambda_t_i[i] * self.ps.pressure[i] + deltaTime2 * lp_i
         aii = self.ps.jacobian_diagonal[i]
         residuum = self.ps.rest_density[i] - self.ps.p_star[i] - A_p
         # self.ps.density_error[i] = -residuum
-        pi = (0.5 / ti.math.max(aii, self.numerical_eps) * residuum)
-        self.ps.pressure[i] = self.ps.pressure_old[i] + pi[0]
-        density -= residuum 
+        pi = (0.5 / ti.math.max(aii, self.numerical_eps))  * residuum
+        self.ps.pressure[i] += pi[0]
+        density_error += ti.abs(residuum)
 
     @ti.func
     def helper_diff_of_pressure_grad(self, i, j, sum:ti.template()):
@@ -247,8 +249,7 @@ class SnowSolver:
 
     @ti.func
     def helper_volume_squared_sum(self, i, j, sum: ti.template()):
-        sum += self.get_volume(i) * self.get_volume(j) * \
-            self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[j]).norm_sqr()
+        sum += self.get_volume(i) * self.get_volume(j) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[j]).norm_sqr()
     
     @ti.func
     def helper_sum_over_j(self, i, j, sum:ti.template()):
@@ -270,8 +271,8 @@ class SnowSolver:
         self.ps.for_all_neighbors(i, self.helper_volume_squared_sum, volume_squared_sum)
         sum_over_j = ti.Vector([0.0,0.0,0.0])
         self.ps.for_all_neighbors(i, self.helper_sum_over_j, sum_over_j)
-        sum_over_k = sum_over_j
-        # self.ps.for_all_neighbors(i, self.helper_sum_over_k, sum_over_k)
+        sum_over_k = ti.Vector([0.0,0.0,0.0])
+        self.ps.for_all_neighbors(i, self.helper_sum_over_k, sum_over_k)
         sum_over_b = ti.Vector([0.0,0.0,0.0])
         # self.ps.for_all_neighbors(i, self.helper_sum_over_b, sum_over_b)
         deltaTime2 = deltaTime * deltaTime
@@ -279,6 +280,9 @@ class SnowSolver:
 
     @ti.kernel
     def implicit_solver_prepare(self, deltaTime: float):
+        '''
+            Computes Step 1-4 in Algorithm 2 in the paper.
+        '''
         #compute sph discretization using eq 6
         # need to find predicted velocity but that can be done later
         # print("Here")
@@ -288,6 +292,9 @@ class SnowSolver:
             self.ps.pressure[i] = 0
             self.ps.pressure_old[i] = 0
             self.ps.jacobian_diagonal[i] = 0
+            self.ps.velocity_star[i] = self.ps.velocity[i] + deltaTime * self.ps.acceleration[i] ##Replace LATER@@ Acceleration includes aother and a friction
+
+        for i in ti.grouped(self.ps.position):
             velocity_div = 0.0
             self.ps.for_all_neighbors(i, self.divergence_discretization, velocity_div)
             self.ps.p_star[i] = self.ps.density[i] - deltaTime * self.ps.density[i] * velocity_div
@@ -325,7 +332,7 @@ class SnowSolver:
         return has_nan
         
     def implicit_pressure_solve(self, deltaTime:float):
-        max_iterations = 10
+        max_iterations = 1000
         min_iterations = 3
         is_solved = False
         it = 0
