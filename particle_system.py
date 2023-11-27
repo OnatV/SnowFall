@@ -72,6 +72,9 @@ class ParticleSystem:
         self.grid_num_particles = ti.field(dtype=int, shape=(self.grid_size))  ##Holds the number of particles at each grid point
         self.particle_to_grid = ti.field(dtype=int, shape=self.num_particles)        ##Holds the grid point index of each particle, currently not needed because we
         self.padding = self.grid_spacing
+
+
+        self.velocity_star = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles) #@@
         # #2nd grid:
         # ## allocate memory for the grid
         # self.grid_particles_num = ti.field(int, shape=(self.grid_size_x * self.grid_size_y * self.grid_size_z))
