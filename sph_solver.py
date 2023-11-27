@@ -212,7 +212,7 @@ class SnowSolver:
         # self.ps.density_error[i] = -residuum
         pi = (0.5 / ti.math.max(aii, self.numerical_eps))  * residuum
         self.ps.pressure[i] += pi[0]
-        density_error += ti.abs(residuum)
+        density_error += ti.abs(pi)
 
     @ti.func
     def helper_diff_of_pressure_grad(self, i, j, sum:ti.template()):
@@ -297,26 +297,34 @@ class SnowSolver:
         return density_error / self.ps.num_particles
     
     @ti.kernel
-    def compute_a_lambda(self):
+    def compute_a_lambda(self, success : ti.template()):
         for i in ti.grouped(self.ps.position):
             if self.ps.density[i][0] == 0.0:
                 continue
+            if not success:
+                self.ps.pressure_gradient[i] = 0
             self.ps.acceleration[i] -= (1.0 / ti.math.max(self.ps.density[i][0], self.numerical_eps)) * self.ps.pressure_gradient[i]
 
     def implicit_pressure_solve(self, deltaTime:float):
-        max_iterations = 1000
+        max_iterations = 100
         min_iterations = 3
         is_solved = False
         it = 0
         # print("here")
-        avg_density_error = 0.0
+        avg_density_error_prev = 0.0
         while ((~is_solved or it < min_iterations) and it < max_iterations):
             avg_density_error = self.implicit_pressure_solver_step(deltaTime)
-            # if avg_density_error < 0.1:
-                # is_solved = True 
+            print("avg_density_error", avg_density_error)
+            if avg_density_error > avg_density_error_prev:
+                is_solved = None
+                break
+            if avg_density_error < 0.1:
+                is_solved = True 
                 # print("Converged")
+
             it = it + 1
 
+        return is_solved
     def solve_a_lambda(self, deltaTime):
         '''
             Computes Step 6 in Algorithm 1 in the paper.
@@ -324,8 +332,8 @@ class SnowSolver:
         '''
         # print("solve_alam")
         self.implicit_solver_prepare(deltaTime)
-        self.implicit_pressure_solve(deltaTime)
-        self.compute_a_lambda()
+        success = self.implicit_pressure_solve(deltaTime)
+        self.compute_a_lambda(success)
 
     @ti.func
     def aux_correction_matrix(self, i_idx, j_idx, res:ti.template()):

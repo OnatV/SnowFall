@@ -23,5 +23,5 @@ class SnowConfig:
         self.theta_c = 0
         self.theta_s = 1
 
-        self.enable_wind = False
+        self.enable_wind = True
         
