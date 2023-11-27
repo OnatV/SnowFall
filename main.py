@@ -21,7 +21,8 @@ if __name__ =='__main__':
     sim_is_running = False
     while ps.window.running:
         # press SPACE to start the simulation
-        if ps.window.is_pressed(ti.ui.SPACE, ' '): sim_is_running = ~sim_is_running
+        if ps.window.is_pressed(ti.ui.SPACE, ' '): sim_is_running = True
+        if ps.window.is_pressed(ti.ui.ALT): sim_is_running = False
         if sim_is_running:
             snow_solver.step(cfg.deltaTime)
         ps.visualize()

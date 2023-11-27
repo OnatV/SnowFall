@@ -21,7 +21,7 @@ class ParticleSystem:
 
         self.enable_wind = config.enable_wind
 
-        self.grid_spacing = self.cfg.grid_spacing
+        self.grid_spacing = self.smoothing_radius * 2
         # self.grid_size= self.cfg.grid_size
         # self.num_grid_cells = int(self.cfg.grid_size ** 3)
         self.max_particles_per_cell = self.cfg.grid_max_particles_per_cell
@@ -34,7 +34,7 @@ class ParticleSystem:
         print("Built grid")
         print(self.position[0])
         # for visualization
-        self.window = ti.ui.Window("Snowfall", (800,800))
+        self.window = ti.ui.Window("Snowfall", (800,800), vsync=True)
         self.canvas = self.window.get_canvas()
         self.scene = ti.ui.Scene()
         self.camera = ti.ui.Camera()
@@ -283,7 +283,7 @@ class ParticleSystem:
 
 
     def visualize(self):
-        self.camera.track_user_inputs(self.window, movement_speed=0.0003, hold_key=ti.ui.RMB)
+        self.camera.track_user_inputs(self.window, movement_speed=0.03, hold_key=ti.ui.RMB)
         self.scene.set_camera(self.camera)
         self.scene.ambient_light((0.8, 0.8, 0.8))
         self.draw_domain()

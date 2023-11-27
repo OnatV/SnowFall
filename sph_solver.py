@@ -235,7 +235,8 @@ class SnowSolver:
 
     @ti.func
     def helper_volume_squared_sum(self, i, j, sum: ti.template()):
-        sum += self.get_volume(i) * self.get_volume(j) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[j]).norm()
+        sum += self.get_volume(i) * self.get_volume(j) * \
+            self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[j]).norm_sqr()
     
     @ti.func
     def helper_sum_over_j(self, i, j, sum:ti.template()):
@@ -256,8 +257,8 @@ class SnowSolver:
         volume_squared_sum = 0.0
         self.ps.for_all_neighbors(i, self.helper_volume_squared_sum, volume_squared_sum)
         sum_over_j = ti.Vector([0.0,0.0,0.0])
-        # self.ps.for_all_neighbors(i, self.helper_sum_over_j, sum_over_j)
-        sum_over_k = ti.Vector([0.0,0.0,0.0])
+        self.ps.for_all_neighbors(i, self.helper_sum_over_j, sum_over_j)
+        sum_over_k = sum_over_j
         # self.ps.for_all_neighbors(i, self.helper_sum_over_k, sum_over_k)
         sum_over_b = ti.Vector([0.0,0.0,0.0])
         # self.ps.for_all_neighbors(i, self.helper_sum_over_b, sum_over_b)
