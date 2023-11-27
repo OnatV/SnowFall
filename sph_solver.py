@@ -160,8 +160,19 @@ class SnowSolver:
 
     @ti.func
     def compute_lame_parameters(self,i):
-        # for i in ti.grouped(self.ps.position):
-            self.ps.lambda_t_i[i] = 20
+        '''
+            Section 3.3.2
+        '''
+        young_mod = 20_000
+        xi = 10
+        nu = 0.2
+        numerator = young_mod * nu
+        denom = (1 + nu) * (1 - 2*nu)
+        p0_t = self.ps.rest_density[i]
+        # what should p_0 be?
+        # p_0 = 
+        k = numerator / denom
+        self.ps.lambda_t_i[i] = k * ti.exp(xi * 1)
 
     @ti.func
     def compute_rest_density(self, i):
@@ -192,6 +203,7 @@ class SnowSolver:
     def divergence_discretization(self, i, k, sum:ti.template()):
         sum += self.get_volume(k) * (self.ps.velocity[k] - self.ps.velocity[i]).dot(self.cubic_kernel_derivative(self.ps.position[i]-self.ps.position[k]))
 
+    # consider: https://en.wikipedia.org/wiki/Jacobi_method
     @ti.func
     def compute_A_p(self, i, deltaTime, density:ti.template()):
         deltaTime2 = deltaTime * deltaTime
@@ -203,12 +215,13 @@ class SnowSolver:
         # self.ps.for_all_neighbors(i, self.helper_sum_over_b, lp2)
         self.ps.pressure_laplacian[i] = lp + 1.5 * lp2
         # now compute Ap
-        A_p = -self.ps.rest_density[i] / self.ps.lambda_t_i[i] * self.ps.pressure[i] + deltaTime2 * self.ps.pressure_laplacian[i]
+        # livio: i'm really unsure what A_p really is
+        A_p = deltaTime2 * self.ps.pressure_laplacian[i]
         aii = self.ps.jacobian_diagonal[i]
         residuum = self.ps.rest_density[i] - self.ps.p_star[i] - A_p
         # self.ps.density_error[i] = -residuum
         pi = (0.5 / ti.math.max(aii, self.numerical_eps) * residuum)
-        self.ps.pressure[i] += pi[0]
+        self.ps.pressure[i] = self.ps.pressure_old[i] + pi[0]
         density -= residuum 
 
     @ti.func
@@ -217,7 +230,6 @@ class SnowSolver:
             self.ps.position[i] - self.ps.position[j])
         )
 
-
     @ti.func
     def compute_pressure_gradient(self, i):
         self.ps.pressure_gradient[i] = 0.0
@@ -225,11 +237,11 @@ class SnowSolver:
         self.ps.for_all_neighbors(i, self.helper_sum_of_pressure, sum_of_pressures)
         sum_of_b = 0.0
         # self.ps.for_all_neighbors(i, self.helper_sum_over_b, sum_of_b)
-        self.ps.pressure_gradient[i] = sum_of_pressures + 1.5 * self.ps.pressure[i] * sum_of_b
+        self.ps.pressure_gradient[i] = sum_of_pressures + 1.5 * self.ps.pressure_old[i] * sum_of_b
 
     @ti.func
     def helper_sum_of_pressure(self, i, j, sum:ti.template()):
-        sum += (self.ps.pressure[j] + self.ps.pressure[i]) * self.get_volume(j) * self.cubic_kernel_derivative(
+        sum += (self.ps.pressure_old[j] + self.ps.pressure_old[i]) * self.get_volume(j) * self.cubic_kernel_derivative(
             self.ps.position[i] - self.ps.position[j]
         )
 
@@ -273,6 +285,8 @@ class SnowSolver:
         for i in ti.grouped(self.ps.position):
             # print(i)
             self.ps.p_star[i] = 0
+            self.ps.pressure[i] = 0
+            self.ps.pressure_old[i] = 0
             self.ps.jacobian_diagonal[i] = 0
             velocity_div = 0.0
             self.ps.for_all_neighbors(i, self.divergence_discretization, velocity_div)
@@ -282,6 +296,8 @@ class SnowSolver:
     @ti.kernel
     def implicit_pressure_solver_step(self, deltaTime:float)->ti.f32:
         density_error = ti.Vector([0.0])
+        for i in ti.grouped(self.ps.position):
+            self.ps.pressure_old[i] = self.ps.pressure[i]
         for i in ti.grouped(self.ps.position):
             self.compute_pressure_gradient(i)
         for i in ti.grouped(self.ps.position):
@@ -294,9 +310,22 @@ class SnowSolver:
             if self.ps.density[i][0] == 0.0:
                 continue
             self.ps.acceleration[i] -= (1.0 / ti.math.max(self.ps.density[i][0], self.numerical_eps)) * self.ps.pressure_gradient[i]
-
+    
+    @ti.func
+    def nan_check(self) -> bool:
+        has_nan = False
+        for i in range(self.ps.num_particles):
+            if (ti.math.isnan(self.ps.pressure[i])) or \
+                ti.Vector.any(ti.math.isnan(self.ps.pressure_gradient[i])) or \
+                ti.Vector.any(ti.math.isnan(self.ps.pressure_laplacian[i])) or \
+                ti.Vector.any(ti.math.isnan(self.ps.jacobian_diagonal[i])) or \
+                ti.Vector.any(ti.math.isnan(self.ps.p_star[i])) or \
+                ti.Vector.any(ti.math.isnan(self.ps.rest_density[i])):
+                has_nan = True
+        return has_nan
+        
     def implicit_pressure_solve(self, deltaTime:float):
-        max_iterations = 100
+        max_iterations = 10
         min_iterations = 3
         is_solved = False
         it = 0
@@ -309,6 +338,7 @@ class SnowSolver:
                 is_solved = True 
                 # print("Converged")
             it = it + 1
+            print("pressure", self.ps.pressure[0])
 
     def solve_a_lambda(self, deltaTime):
         '''
@@ -375,7 +405,8 @@ class SnowSolver:
         if ti.static(self.wind_enabled):
             wind_acc += self.ps.wind_direction * self.ps.position[i].dot(self.ps.wind_direction)
 
-        self.ps.acceleration[i] = self.ps.gravity + wind_acc
+        # remove gravity for now
+        self.ps.acceleration[i] = 0#self.ps.gravity + wind_acc
 
     @ti.func
     def compute_flow(self, i):

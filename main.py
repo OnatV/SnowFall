@@ -25,4 +25,5 @@ if __name__ =='__main__':
         if ps.window.is_pressed(ti.ui.ALT): sim_is_running = False
         if sim_is_running:
             snow_solver.step(cfg.deltaTime)
+            sim_is_running = False # press space for one step at a time
         ps.visualize()

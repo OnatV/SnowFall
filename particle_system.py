@@ -52,6 +52,7 @@ class ParticleSystem:
         self.position = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.position_0 = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.pressure = ti.field(float, shape=self.num_particles)
+        self.pressure_old = ti.field(float, shape=self.num_particles)
         self.pressure_gradient = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.pressure_laplacian = ti.Vector.field(1, dtype=float, shape=self.num_particles)
         self.deformation_gradient = ti.Matrix.field(n=3, m=3, dtype=float, shape=self.num_particles) # an num_particles length array of 3x3 matrices
@@ -106,9 +107,12 @@ class ParticleSystem:
         print("initilizing particle positions...")
         for i in range(self.num_particles):
             # set it so that it fills up most of the default domain size, should be done more cleverly in the future
-            x = (self.domain_size[0] - 1) * ti.random(dtype=float) + 0.5
-            y = (self.domain_size[1] - 1)  * ti.random(dtype=float) + 0.5
+            #x = (self.domain_size[0] - 1) * ti.random(dtype=float) + 0.5
+            #y = (self.domain_size[1] - 1)  * ti.random(dtype=float) + 0.5
             z = (self.domain_size[2] - 1)  * ti.random(dtype=float) + 0.5
+            # put all on a line -> to test 1d case
+            x = 2.5
+            y = 2.5
             self.position[i] = ti.Vector([x, y, z])
         print("Intialized!")
 
