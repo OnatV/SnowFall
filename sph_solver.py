@@ -353,21 +353,15 @@ class SnowSolver:
                 ti.Vector.any(ti.math.isnan(self.ps.rest_density[i])):
                 has_nan = True
         return has_nan
-        
+     
     def implicit_pressure_solve(self, deltaTime:float):
         max_iterations = 100
         min_iterations = 10
         is_solved = False
         it = 0
-        # print("here")
+        avg_density_error = self.implicit_pressure_solver_step(deltaTime)
         avg_density_error_prev = 1000.0 # set it high to avoid early termination
         while ((~is_solved or it < min_iterations) and it < max_iterations):
-            avg_density_error = self.implicit_pressure_solver_step(deltaTime)
-            print("-----ITERATION", it,"---------")
-            print("avg_density_error", avg_density_error)
-            print("pressure", self.ps.pressure[0])
-            print("pressure_gradient", self.ps.pressure_gradient[0])
-            print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
             if avg_density_error > avg_density_error_prev and it > min_iterations:
                 is_solved = None
                 break
@@ -444,7 +438,7 @@ class SnowSolver:
             wind_acc += self.ps.wind_direction * self.ps.position[i].dot(self.ps.wind_direction)
 
         # remove gravity for now
-        self.ps.acceleration[i] = self.ps.gravity 
+        self.ps.acceleration[i] = self.ps.gravity + wind_acc
 
     @ti.func
     def compute_flow(self, i):
@@ -587,7 +581,6 @@ class SnowSolver:
         # print("Step")
 
     def step(self, deltaTime):
-        self.ps.update_grid()
         self.ps.color_neighbors(0)
         self.compute_boundary_volumes()
         # self.ps.cumsum.run(self.ps.grid_particles_num)
@@ -598,9 +591,11 @@ class SnowSolver:
         # self.ps.update_grid()
         # print("before substep")
         self.substep(deltaTime)
+        self.ps.update_grid()
         # enforce the boundary of the domain (and later rigid bodies)
         # self.enforce_boundary_3D()
         # update time
         self.time += deltaTime
         print(self.ps.position[0])
+        print(self.ps.colors[0])
         print("Step")

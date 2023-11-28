@@ -9,7 +9,7 @@ class ParticleSystem:
         self.cfg = config
         self.domain_start = np.array([0.0, 0.0, 0.0])
         self.domain_size = self.cfg.domain_size
-        self.num_particles = self.cfg.num_particles
+        self.num_particles = 2
         self.domain_end = self.domain_start + self.domain_size
         self.particle_radius = self.cfg.particle_radius 
         self.boundary_particle_radius = 0.1 # move to config
@@ -21,7 +21,7 @@ class ParticleSystem:
         self.boundary_smoothing_radius = self.boundary_particle_radius * 4.0
         self.wind_direction = ti.Vector(self.cfg.wind_direction)
         self.enable_wind = True
-        self.initialize_type = self.cfg.initialize_type
+        self.initialize_type = 'two'
         self.grid_spacing = self.smoothing_radius * 2
         # self.grid_size= self.cfg.grid_size
         # self.num_grid_cells = int(self.cfg.grid_size ** 3)
@@ -33,9 +33,12 @@ class ParticleSystem:
         print("Creating Grid")
         self.update_grid()
         # init once as long as boundaries are static
-        self.update_boundary_grid()
+        print(self.colors[0])
+        #self.update_boundary_grid()
+        print(self.colors[0])
         print("Built grid")
         print(self.position[0])
+        print(self.theta_clamp_c)
         # for visualization
         self.window = ti.ui.Window("Snowfall", (800,800), vsync=True)
         self.canvas = self.window.get_canvas()
@@ -118,7 +121,7 @@ class ParticleSystem:
             [0, 1 + self.cfg.theta_s, 0],
             [0, 0, 1 + self.cfg.theta_s]
         ])
-        self.colors = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+        self.colors = ti.Vector.field(3, dtype=float, shape=self.num_particles)
 
     def initialize_particle_block(self):
         block_length = int(np.floor(np.cbrt(self.num_particles)))
@@ -142,10 +145,17 @@ class ParticleSystem:
                 z = (self.domain_size[2] - 1)  * ti.random(dtype=float) + 0.5
                 self.position[i] = ti.Vector([x, y, z])
 
+    def init_two(self):
+        print("init two")
+        self.position[0] = ti.Vector([0.5, 0.5, 0.5])
+        self.position[1] = self.position[0] + self.particle_radius
+
     def initialize_fields(self):
         print("initializing particle positions...")
         if self.initialize_type == 'block':
             self.initialize_particle_block()
+        elif self.initialize_type == 'two':
+            self.init_two()
         else:
             self.initialize_random_particles            
         for i in range(self.num_particles):
@@ -159,6 +169,7 @@ class ParticleSystem:
             z = float(i % boundary_plane_num_z_dir) / (boundary_plane_num_z_dir - 1) * self.domain_size[2]
             self.boundary_particles[i] = ti.Vector([x, y, z])
         print("Intialized!")
+
 
     
 
@@ -424,8 +435,8 @@ class ParticleSystem:
         self.scene.lines(vertices=self.vertices, indices=self.indices, width=1.0)
 
     def draw_particles(self):
-        self.scene.particles(self.position, color = (0.99, 0.99, 0.99), radius = 0.5 * self.particle_radius, per_vertex_color=self.colors)
-        self.scene.particles(self.boundary_particles, color = (0.4, 0.4, 0.4),
-                              radius = 0.5 * self.boundary_particle_radius)
+        self.scene.particles(self.position, color = (0.99, 0.99, 0.99), radius = self.particle_radius, per_vertex_color=self.colors)
+        #self.scene.particles(self.boundary_particles, color = (0.4, 0.4, 0.4),
+        #                      radius = 0.5 * self.boundary_particle_radius)
 
 

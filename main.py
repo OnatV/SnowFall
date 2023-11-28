@@ -14,7 +14,7 @@ if __name__ =='__main__':
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--config', action='store', required=True)
     args = parser.parse_args()
-    ti.init(arch=ti.cpu, debug=args.debug)
+    ti.init(arch=ti.cpu, debug=True)
     print_about()
     cfg = SnowConfig(args.config)
     ps = ParticleSystem(cfg)
