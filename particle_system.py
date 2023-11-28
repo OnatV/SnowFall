@@ -165,26 +165,27 @@ class ParticleSystem:
 
 
     def update_grid(self):
-        self.update_grid1()
-        self.update_grid2()
+        # self.update_grid1()
+        # self.update_grid2()
+        self.fluid_grid.update_grid(self.position)
         print("Done with update")
     
-    @ti.kernel
-    def update_grid1(self):
-        ##First remove all particles from grid
-        for i in range(self.grid_size):
-            self.grid_num_particles[i] = 0
-        # print("Done with update")
+    # @ti.kernel
+    # def update_grid1(self):
+    #     ##First remove all particles from grid
+    #     for i in range(self.grid_size):
+    #         self.grid_num_particles[i] = 0
+    #     # print("Done with update")
     
-    @ti.kernel
-    def update_grid2(self):
-        for i in range(self.num_particles):   
-            grid_idx = self.to_grid_idx(i)
-            if self.grid_num_particles[grid_idx] >= self.max_particles_per_cell:
-                continue
-            self.grid[grid_idx, self.grid_num_particles[grid_idx]] = i
-            self.grid_num_particles[grid_idx] += 1
-            self.particle_to_grid[i] = grid_idx
+    # @ti.kernel
+    # def update_grid2(self):
+    #     for i in range(self.num_particles):   
+    #         grid_idx = self.to_grid_idx(i)
+    #         if self.grid_num_particles[grid_idx] >= self.max_particles_per_cell:
+    #             continue
+    #         self.grid[grid_idx, self.grid_num_particles[grid_idx]] = i
+    #         self.grid_num_particles[grid_idx] += 1
+    #         self.particle_to_grid[i] = grid_idx
 
     @ti.func
     def set_neighbor_color(self, i, j, color):
