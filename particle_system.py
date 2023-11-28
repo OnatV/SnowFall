@@ -2,7 +2,7 @@ import taichi as ti
 import numpy as np
 
 from snow_config import SnowConfig
-# from fluid_grid import FluidGrid
+from fluid_grid import FluidGrid
 @ti.data_oriented
 class ParticleSystem:
     def __init__(self, config: SnowConfig, GGUI = True):
@@ -67,6 +67,8 @@ class ParticleSystem:
         self.G_t_i = ti.field(dtype=float, shape=self.num_particles) # Lame' parameters
         self.jacobian_diagonal = ti.Vector.field(1, dtype=float, shape=self.num_particles)
         self.density_error = ti.Vector.field(1, dtype=float, shape=self.num_particles)
+
+        self.fluid_grid = FluidGrid(self.domain_start, self.domain_end, self.smoothing_radius)
 
         self.grid_size_x = int((self.domain_end[0] - self.domain_start[0]) / self.grid_spacing)
         self.grid_size_y = int((self.domain_end[1] - self.domain_start[1]) / self.grid_spacing)
@@ -147,7 +149,8 @@ class ParticleSystem:
         if self.initialize_type == 'block':
             self.initialize_particle_block()
         else:
-            self.initialize_random_particles            
+            self.initialize_random_particles
+        self.fluid_grid.update_grid(self.position)
         for i in range(self.num_particles):
             self.pressure[i] = 0.0
             self.colors[i] = ti.Vector([1.0, 1.0, 1.0])
@@ -159,62 +162,6 @@ class ParticleSystem:
             z = float(i % boundary_plane_num_z_dir) / (boundary_plane_num_z_dir - 1) * self.domain_size[2]
             self.boundary_particles[i] = ti.Vector([x, y, z])
         print("Intialized!")
-
-    
-
-    # def cumsum_indx(self):
-    #     np_arr = np.cumsum(self.grid_particles_num.to_numpy())
-    #     self.grid_particles_num.from_numpy(np_arr)
-
-    # @ti.func
-    # def pos_to_index(self, pos):
-    #     return (pos / self.grid_spacing).cast(int)
-
-    # @ti.func
-    # def flatten_grid_index(self, grid_index):
-    #     return grid_index[0] * self.grid_size_y * self.grid_size_z + grid_index[1] * self.grid_size_z + grid_index[2]
-    
-    # @ti.func
-    # def get_flattened_grid_index(self, pos):
-    #     return self.flatten_grid_index(self.pos_to_index(pos))
-
-    # @ti.kernel
-    # def sort_particles(self):
-    #     for i in range(self.num_particles):
-    #         idx = self.num_particles - 1 - i
-    #         offset = 0
-    #         if self.grid_ids[idx] - 1 >= 0:
-    #             offset = self.grid_particles_num[self.grid_ids[idx] - 1]
-    #         self.grid_ids_new[idx] = ti.atomic_sub(self.grid_particles_num_swap[self.grid_ids[idx]], 1) - 1 + offset
-    #     # copy data into swaps, with reordering
-    #     for i in ti.grouped(self.grid_ids):
-    #         idx = self.grid_ids_new[i]
-    #         self.grid_ids_swap[idx] = self.grid_ids[i]
-    #         self.position_0_swap[idx] = self.position_0[i]
-    #         self.position_swap[idx] = self.position[i]
-    #         self.velocity_swap[idx] = self.velocity[i]
-    #         self.acceleration_swap[idx] = self.acceleration[i]
-    #         self.density_swap[idx] = self.density[i]
-    #         self.pressure_swap[idx] = self.pressure[i]
-    #     # repopulate original fields
-    #     for i in ti.grouped(self.grid_ids):
-    #         self.grid_ids[i] = self.grid_ids_swap[i]
-    #         self.position_0[i] = self.position_0_swap[i]
-    #         self.position[i] = self.position_swap[i]
-    #         self.velocity[i] = self.velocity_swap[i]
-    #         self.acceleration[i] = self.acceleration_swap[i]
-    #         self.density[i] = self.density_swap[i]
-    #         self.pressure[i] = self.pressure_swap[i]
-    # @ti.kernel
-    # def update_grid(self):
-    #     for i in ti.grouped(self.grid_particles_num):
-    #         self.grid_particles_num[i] = 0
-    #     for i in ti.grouped(self.position):
-    #         grid_index = self.get_flattened_grid_index(self.position[i])
-    #         self.grid_ids[i] = grid_index
-    #         ti.atomic_add(self.grid_particles_num[grid_index], 1)
-    #     for i in ti.grouped(self.grid_particles_num):
-    #         self.grid_particles_num_swap[i] = self.grid_particles_num[i]
 
 
     def update_grid(self):
@@ -245,8 +192,7 @@ class ParticleSystem:
         self.colors[j] = color
 
     @ti.kernel
-    def color_neighbors(self, i:int):
-        color = ti.Vector([1.0, 0.0, 0.0])
+    def color_neighbors(self, i:int, color:ti.template()):
         self.for_all_neighbors(ti.Vector([i]), self.set_neighbor_color, color)
     
     @ti.kernel
@@ -298,33 +244,26 @@ class ParticleSystem:
         idx = ti.cast((x_ + y_ * self.grid_size_y + z_ * self.grid_size_y * self.grid_size_z), int)
         return ti.math.clamp(idx, 0, self.grid_size - 1)
 
-    # takes a grid index and converts it to a 3D index
-    # this probably can and should be precomputed
-    # @ti.func
-    # def grid_ind_to_ijk(self, n):
-    #     i = n % self.grid_size_x
-    #     j = (i / self.grid_size_x) % self.grid_size_x
-    #     k = i / (self.grid_size_x * self.grid_size_x)
-    #     return (i, j, k)
-    
     @ti.func
     def for_all_neighbors(self, i, func : ti.template(), ret : ti.template()):
-        '''
-            Only iterates over 1 neighbours of grid cell i to find the points in the neighbourhood..
-            A slow function because:, 
-                -can't be parallelized.
-                -if checks are not static.
-        '''
-        grid_idx = self.to_grid_idx(i)
-        ###Iterate over all neighbours of grid cell i
-        for x,y,z in ti.ndrange((-1,2),(-1,2),(-1,2)):
-            current_grid = grid_idx + self.convert_grid_ix(x,y,z)
-            if max(0, current_grid) == 0 : continue
-            if self.grid_size - 1 == min(self.grid_size - 1, current_grid) : continue
-            for j in range(self.grid_num_particles[current_grid]):
-                p_j = self.grid[current_grid, j] # Get point idx
-                if i[0] != p_j and (self.position[i] - self.position[p_j]).norm() < self.smoothing_radius:
-                    func(i, p_j, ret)
+        # pos = self.position[i]
+        self.fluid_grid.for_all_neighbors(i, self.position, func, ret, self.smoothing_radius)
+    #     '''
+    #         Only iterates over 1 neighbours of grid cell i to find the points in the neighbourhood..
+    #         A slow function because:, 
+    #             -can't be parallelized.
+    #             -if checks are not static.
+    #     '''
+    #     grid_idx = self.to_grid_idx(i)
+    #     ###Iterate over all neighbours of grid cell i
+    #     for x,y,z in ti.ndrange((-1,2),(-1,2),(-1,2)):
+    #         current_grid = grid_idx + self.convert_grid_ix(x,y,z)
+    #         if max(0, current_grid) == 0 : continue
+    #         if self.grid_size - 1 == min(self.grid_size - 1, current_grid) : continue
+    #         for j in range(self.grid_num_particles[current_grid]):
+    #             p_j = self.grid[current_grid, j] # Get point idx
+    #             if i[0] != p_j and (self.position[i] - self.position[p_j]).norm() < self.smoothing_radius:
+    #                 func(i, p_j, ret)
     @ti.func
     def for_all_b_neighbors(self, i, func : ti.template(), ret : ti.template()):
         '''
@@ -344,44 +283,6 @@ class ParticleSystem:
                 p_j = self.boundary_grid[current_grid, j] # Get point idx
                 if i[0] != p_j and (self.position[i] - self.boundary_particles[p_j]).norm() < self.smoothing_radius:
                     func(i, p_j, ret)
-
-    # def sum_all_negihbours(self, i, func : ti.template(), ret : ti.template()):
-    #     '''
-    #         Only iterates over 1 neighbours of grid cell i to find the points in the neighbourhood..
-    #         A slow function because:, 
-    #             -can't be parallelized.
-    #             -if checks are not static.
-    #     '''
-    #     grid_idx = self.to_grid_idx(i)
-    #     ###Iterate over all neighbours of grid cell i
-    #     for x,y,z in ti.ndrange((-1,2),(-1,2),(-1,2)):
-    #         current_grid = grid_idx + self.convert_grid_ix(x,y,z)
-    #         if max(0, current_grid) == 0 : continue
-    #         # if self.num_grid_cells - 1 == min(self.num_grid_cells - 1, current_grid) : continue
-    #         if current_grid < 0: continue
-    #         if current_grid >= self.num_grid_cells: continue
-    #         for j in range(self.grid_num_particles[current_grid]):
-    #             p_j = self.grid[current_grid, j] # Get point idx
-    #             if p_j > self.num_particles or p_j < 0: continue
-    #             if i != j and (self.position[i] - self.position[p_j]).norm() < self.smoothing_radius:
-    #                 func(i, p_j, ret)
-
-    # 2nd grid:
-    # @ti.func
-    # def for_all_neighbors(self, i, func: ti.template(), retval: ti.template()):
-    #     center = self.pos_to_index(self.position[i])
-    #     for cell_offset in ti.grouped(ti.ndrange(*((-1, 2),) * self.dim)):
-    #         grid_index = self.flatten_grid_index(center + cell_offset)
-    #         for j in range(self.grid_particles_num[ti.max(0, grid_index - 1)], self.grid_particles_num[grid_index]):
-    #             if i[0] != j and (self.position[i] - self.position[j]).norm() < self.smoothing_radius:
-    #                 func(i, j, retval)
-
-    # @ti.func
-    # def find_neighbors_as_list(self, i):
-    #     current_particle_grid_idx = self.particle_to_grid[i]
-    #     ret = ti.Vector.field(1, shape=self.max_particles_per_cell)
-
-
 
     def visualize(self):
         self.camera.track_user_inputs(self.window, movement_speed=0.03, hold_key=ti.ui.RMB)

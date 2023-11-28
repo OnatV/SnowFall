@@ -1,50 +1,78 @@
-# import taichi as ti
-# import numpy as np
+import taichi as ti
+import numpy as np
 
-# from snow_config import SnowConfig
+from snow_config import SnowConfig
 
-# @ti.data_oriented
-# class FluidGrid:
-#     def __init__(self,
-#         domain_start, 
-#         domain_end,
-#         grid_spacing, 
-#         max_particles_per_cell,
-#         num_particles
-#     ):
-#         self.domain_start = domain_start
-#         self.domain_end = domain_end
-#         self.grid_spacing = grid_spacing
-#         self.max_particles_per_cell = max_particles_per_cell
-#         self.grid_size_x = int((domain_end[0] - domain_start[0]) / self.grid_spacing)
-#         self.grid_size_y = int((domain_end[1] - domain_start[1]) / self.grid_spacing)
-#         self.grid_size_z = int((domain_end[2] - domain_start[2]) / self.grid_spacing)
-#         self.num_particles = num_particles
-#         ## allocate memory for the grid
-#         self.grid_id = ti.Vector.field(n=self.max_particles_per_cell, shape=(self.grid_size_x * self.grid_size_y * self.grid_size_z), dtype=int)
-#         self.grid_particles_num = ti.field(int, shape=int(self.grid_size_x * self.grid_size_y * self.grid_size_z))
+@ti.data_oriented
+class FluidGrid:
+    def __init__(self,
+        grid_start, 
+        grid_end,
+        grid_spacing
+    ):
+        self.grid_start = grid_start
+        self.grid_end = grid_end
+        self.grid_spacing = grid_spacing
+        self.grid_size_x = int((grid_end[0] - grid_start[0]) / self.grid_spacing)
+        self.grid_size_y = int((grid_end[1] - grid_start[1]) / self.grid_spacing)
+        self.grid_size_z = int((grid_end[2] - grid_start[2]) / self.grid_spacing)
+        self.num_cells = self.grid_size_x * self.grid_size_y * self.grid_size_z
+        ## create the grid
+        print(f"Creating a grid with dimension {self.grid_size_x}, {self.grid_size_y}, {self.grid_size_z}")
+        # self.grid_cells = ti.field(ti.root.dynamic(ti.i, 1024, chunk_size=32), shape=(self.grid_size_x * self.grid_size_y * self.grid_size_z))
+        self.handle = ti.root.dense(ti.i, (self.num_cells) ).dynamic(ti.j, 64, chunk_size=8)
+        self.grid = ti.field(int)
+        self.handle.place(self.grid)
 
-#     @ti.func
-#     def pos_to_index(self, pos):
-#         return (pos / self.grid_spacing).cast(int)
+    @ti.func
+    def to_grid_idx(self, p:ti.template()):
+        '''
+        Takes a position in 3D space and maps it to 3D grid indices
+        '''
+        x = int(ti.math.floor(p.x / self.grid_spacing))
+        y = int(ti.math.floor(p.y / self.grid_spacing))
+        z = int(ti.math.floor(p.z / self.grid_spacing))
 
-#     @ti.func
-#     def flatten_grid_index(self, grid_index):
-#         return grid_index[0] * self.grid_size_y * self.grid_size_z + grid_index[1] * self.grid_size_z + grid_index[2]
-    
-#     @ti.func
-#     def get_flattened_grid_index(self, pos):
-#         return self.flatten_grid_index(self.pos_to_index(pos))
+        return (x,y,z)
 
-#     @ti.kernel
-#     def update_grid(self, positions: ti.template()):
-#         for i in ti.grouped(self.grid):
-#             self.grid[i] = 0
-#         for i in ti.grouped(positions):
-#             grid_index = self.get_flattened_grid_index(positions[i])
-#             self.grid[i] = grid_index
-#             ti.atomic_add(self.grid_particles_num[grid_index], 1)
-#         # for i in ti.grouped(self.grid_particles_num):
-#         #     self.grid_particles_num
+    @ti.func
+    def grid_to_array_index(self, x, y, z):
+        '''
+        This takes a 3D grid index and maps it to a 1D array index 
+        '''
+        indx = z * self.grid_size_x * self.grid_size_y + y * self.grid_size_x + z
+
+        return indx
+
+    @ti.kernel
+    def update_grid(self, particles:ti.template()):
+        for i in range(self.num_cells):
+            self.grid[i].deactivate()
+        for i in ti.grouped(particles):
+            (x, y, z) = self.to_grid_idx(particles[i])
+            indx = self.grid_to_array_index(x, y, z)
+            self.grid[indx].append(i)
 
 
+    @ti.func
+    def for_all_neighbors(self, i, positions: ti.template(), func : ti.template(), ret : ti.template(), h):
+        '''
+            param: i index of particle
+            param: pos position of particle i
+            param: func function to be evaluated
+            param: ret return value
+        '''
+        grid_idx = self.to_grid_idx(positions[i])
+        
+        ###Iterate over all neighbours of grid cell i
+        for g in ti.grouped(ti.ndrange(*((-1, 2),) * 3)):
+            current_grid = (
+                ti.math.clamp(grid_idx[0] + g[0], 0, self.grid_size_x),
+                ti.math.clamp(grid_idx[1] + g[1], 0, self.grid_size_y),
+                ti.math.clamp(grid_idx[2] + g[2], 0, self.grid_size_z)
+            )
+            current_arr = self.grid_to_array_index(current_grid[0], current_grid[1], current_grid[2])
+            for j in range(self.grid[current_arr].length()):
+                p_j = self.grid[current_arr, j] # Get point idx
+                if i[0] != p_j and (positions[i] - positions[p_j]).norm() < h:
+                    func(i, p_j, ret)

@@ -363,11 +363,11 @@ class SnowSolver:
         avg_density_error_prev = 1000.0 # set it high to avoid early termination
         while ((~is_solved or it < min_iterations) and it < max_iterations):
             avg_density_error = self.implicit_pressure_solver_step(deltaTime)
-            print("-----ITERATION", it,"---------")
-            print("avg_density_error", avg_density_error)
-            print("pressure", self.ps.pressure[0])
-            print("pressure_gradient", self.ps.pressure_gradient[0])
-            print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
+            # print("-----ITERATION", it,"---------")
+            # print("avg_density_error", avg_density_error)
+            # print("pressure", self.ps.pressure[0])
+            # print("pressure_gradient", self.ps.pressure_gradient[0])
+            # print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
             if avg_density_error > avg_density_error_prev and it > min_iterations:
                 is_solved = None
                 break
@@ -588,7 +588,14 @@ class SnowSolver:
 
     def step(self, deltaTime):
         self.ps.update_grid()
-        self.ps.color_neighbors(0)
+        self.ps.color_neighbors(0, ti.Vector([1.0, 0.0, 0.0]))
+        self.ps.color_neighbors(9, ti.Vector([0.0, 1.0, 0.0]))
+        self.ps.color_neighbors(99, ti.Vector([1.0, 5.0, 0.0]))
+        self.ps.color_neighbors(90, ti.Vector([0.0, 0.0, 1.0]))
+        self.ps.color_neighbors(909, ti.Vector([1.0, 0.0, 1.0]))
+        self.ps.color_neighbors(900, ti.Vector([0.5, 0.5, 1.0]))
+        self.ps.color_neighbors(990, ti.Vector([0.0, 1.0, 1.0]))
+        self.ps.color_neighbors(999, ti.Vector([1.0, 0.0, 0.5]))
         self.compute_boundary_volumes()
         # self.ps.cumsum.run(self.ps.grid_particles_num)
         # self.ps.cumsum_indx()
@@ -599,8 +606,10 @@ class SnowSolver:
         # print("before substep")
         self.substep(deltaTime)
         # enforce the boundary of the domain (and later rigid bodies)
-        # self.enforce_boundary_3D()
+        self.enforce_boundary_3D()
         # update time
         self.time += deltaTime
         print(self.ps.position[0])
         print("Step")
+
+    
