@@ -30,14 +30,20 @@ class PressureSolver:
         lp2 = 0.0
         self.ps.for_all_b_neighbors(i, self.helper_diff_of_pressure_grad_b, lp2)
         self.ps.pressure_laplacian[i] = lp_i + 1.5 * lp2
+        if (i[0] == 0):
+            print("lp", self.ps.pressure_laplacian[i])
         # now compute Ap
         A_p = -self.ps.rest_density[i] / self.ps.lambda_t_i[i] * self.ps.pressure[i] + deltaTime2 * lp_i
+        if (i[0] == 0):
+            print("A_p",A_p)
         aii = self.ps.jacobian_diagonal[i]
         residuum = self.ps.rest_density[i] - self.ps.p_star[i] - A_p
-        # print("pstar",self.ps.p_star[i])
-        # print("Residuum", residuum)
+        if (i[0] == 0):
+            print("p_star", self.ps.p_star[i])
+            print("aii", aii)
+            print("residuum", residuum)
         pi = (0.5 / ti.math.max(aii, self.numerical_eps)) * residuum
-        self.ps.pressure[i] -= pi[0]
+        self.ps.pressure[i] += pi[0]
         density_error -= residuum
 
     @ti.func
@@ -96,7 +102,7 @@ class PressureSolver:
         self.ps.for_all_neighbors(i, self.helper_ViVj, ViVj)
         self.ps.for_all_neighbors(i, self.helper_Vj, Vj)
         self.ps.for_all_b_neighbors(i, self.helper_Vb, Vb)
-        aii = p_lame - deltaTime2 * ViVj - deltaTime2 * (Vj + psi * Vb).dot(Vj + Vb)
+        self.ps.jacobian_diagonal[i] = p_lame - deltaTime2 * ViVj - deltaTime2 * (Vj + psi * Vb).dot(Vj + Vb)
 
     @ti.kernel
     def implicit_solver_prepare(self, deltaTime: float):
@@ -117,8 +123,8 @@ class PressureSolver:
             velocity_div = 0.0
             self.ps.for_all_neighbors(i, self.vel_div, velocity_div)
             self.ps.for_all_b_neighbors(i, self.vel_div_b, velocity_div)
+            # print("vd", velocity_div)
             self.ps.p_star[i] = self.ps.density[i] - deltaTime * self.ps.density[i] * velocity_div
-            # print("setting p_star:", self.ps.p_star[i])
             self.compute_jacobian_diagonal_entry(i, deltaTime)
 
     def implicit_pressure_solve(self, deltaTime:float) -> bool:
@@ -126,25 +132,28 @@ class PressureSolver:
         min_iterations = 5 # in paper, seemed to converge in 5 iterations or less
         is_solved = False
         it = 0
-        density0 = 1000.0
-        eta = 0.01 * 0.01 * density0
-        # print("here")
-        avg_density_error_prev = 1000.0 # set it high to avoid early termination
-        while ((~is_solved or it < min_iterations) and it < max_iterations):
+        eta = 0.01 * 0.1 * self.ps.avg_rest_density[0]
+        print("eta", eta)
+        while ( (not is_solved or it < min_iterations) and it < max_iterations):
+            it = it + 1
             avg_density_error = self.implicit_pressure_solver_step(deltaTime)
-            print("-----ITERATION", it,"---------")
-            print("avg_density_error", avg_density_error)
-            print("pressure", self.ps.pressure[0])
-            print("rest density", self.ps.rest_density[0])
-            print("pressure_gradient", self.ps.pressure_gradient[0])
-            print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
+            if avg_density_error > 0.0:
+                print("-----ITERATION", it,"---------")
+                print("avg_density_error", avg_density_error)
+                print("pressure", self.ps.pressure[0])
+                print("rest density", self.ps.rest_density[0])
+                print("pressure_gradient", self.ps.pressure_gradient[0])
+                print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
+                print("less than min iters", it < min_iterations)
+                print("is solved", is_solved)
+                print("status", not is_solved or it < min_iterations)
             if np.isnan(avg_density_error):
                 is_solved = False
                 break
             if avg_density_error <= eta:
-                is_solved = True 
-                # print("----Converged---")
-            it = it + 1
+                is_solved = True
+            else:
+                is_solved = False
         return is_solved       
 
     @ti.kernel
@@ -163,4 +172,6 @@ class PressureSolver:
     def solve(self, deltaTime):
         self.implicit_solver_prepare(deltaTime)
         success = self.implicit_pressure_solve(deltaTime)
+        if not success:
+            print("failed to solve")
         return success

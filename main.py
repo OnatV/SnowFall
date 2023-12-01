@@ -24,11 +24,13 @@ if __name__ =='__main__':
     # print(ps.fluid_grid.to_grid_idx(ti.Vector([0.1, 0.1, 0.1])))
     # print(ps.fluid_grid.to_grid_idx(ti.Vector([0.1, 0.2, 0.1])))
     sim_is_running = False
+    time = 0.0
     while ps.window.running:
         # press SPACE to start the simulation
         if ps.window.is_pressed(ti.ui.SPACE, ' '): sim_is_running = True
         if ps.window.is_pressed(ti.ui.ALT): sim_is_running = False
         if sim_is_running:
-            snow_solver.step(cfg.deltaTime)
+            snow_solver.step(cfg.deltaTime, time)
             # sim_is_running = False # press space for one step at a time
+            time += cfg.deltaTime
         ps.visualize()

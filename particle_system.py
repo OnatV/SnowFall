@@ -52,6 +52,7 @@ class ParticleSystem:
         self.density = ti.field(float, shape=self.num_particles)
         self.p_star = ti.field(float, shape=self.num_particles)
         self.rest_density = ti.field(float, shape=self.num_particles)
+        self.avg_rest_density = ti.field(float, shape=1)
         self.position = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.position_0 = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.pressure = ti.field(float, shape=self.num_particles)
@@ -82,8 +83,8 @@ class ParticleSystem:
         self.padding = 0.1 * self.grid_spacing
 
         # boundary particles
-        self.bgrid_x = int(self.domain_size[0] / self.boundary_particle_radius)
-        self.bgrid_z = int(self.domain_size[2] / self.boundary_particle_radius)
+        self.bgrid_x = int(self.domain_size[0] / (0.5 * self.boundary_particle_radius))
+        self.bgrid_z = int(self.domain_size[2] / (0.5 * self.boundary_particle_radius))
         self.num_b_particles = self.bgrid_x * self.bgrid_z
         self.boundary_particles = ti.Vector.field(self.dim, dtype=float,  shape=self.num_b_particles)
         self.boundary_particles_volume = ti.field(float,  shape=self.num_b_particles)
@@ -276,6 +277,6 @@ class ParticleSystem:
     def draw_particles(self):
         self.scene.particles(self.position, color = (0.99, 0.99, 0.99), radius = 0.5 * self.particle_radius, per_vertex_color=self.colors)
         self.scene.particles(self.boundary_particles, per_vertex_color=self.boundary_colors,
-                              radius = self.boundary_particle_radius)
+                              radius = 0.25*self.boundary_particle_radius)
 
 

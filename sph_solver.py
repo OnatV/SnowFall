@@ -39,7 +39,7 @@ class SnowSolver:
                 if i == j: continue
                 if (self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm() > self.ps.smoothing_radius: continue
                 kernel_sum += cubic_kernel((self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm(), self.ps.smoothing_radius)
-            self.ps.boundary_particles_volume[i] = 0.8 * self.ps.bgrid_x ** 3 * (1.0 / kernel_sum)
+            self.ps.boundary_particles_volume[i] = 0.8 * self.ps.boundary_particle_radius ** 3 * (1.0 / kernel_sum)
 
     # def init_kernel_lookup(self, table_size = 100, grad_table_size = 100):
     #     self.kernel_table = ti.field(dtype=float, shape=table_size)
@@ -140,17 +140,17 @@ class SnowSolver:
         '''
             Section 3.3.2
         '''
-        young_mod = 20_000
+        young_mod = 140000
         xi = 10
         nu = 0.2
         numerator = young_mod * nu
-        denom = (1 + nu) * (1 - 2*nu)
+        denom = (1 + nu) * (1 - 2.0*nu)
         p0_t = self.ps.rest_density[i]
         # what should p_0 be?
-        # p_0 = 1000
+        p_0 = 1000
         k = numerator / denom
-        # self.ps.lambda_t_i[i] = k * ti.exp(xi * 1)
-        self.ps.lambda_t_i[i] = 200000
+        self.ps.lambda_t_i[i] = k * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
+        # self.ps.lambda_t_i[i] = 200000
 
     @ti.func
     def compute_rest_density(self, i):
@@ -298,12 +298,15 @@ class SnowSolver:
                     Step 4 : self.compute_accel_ext(i)
                     Step 5 : self.compute_accel_friction(i)
         '''
+        rest_density_sum = 0.0
         for i in ti.grouped(self.ps.position):
             self.compute_rest_density(i) #Step 2
             self.compute_lame_parameters(i) ##Don't get what this is doing
             self.compute_correction_matrix(i) #Step 3
             self.compute_accel_ext(i) #Step 4
             self.compute_accel_friction(i) #Step 5
+            rest_density_sum += self.ps.rest_density[i]
+        self.ps.avg_rest_density[0] = rest_density_sum / self.ps.num_particles
 
 
     @ti.kernel
@@ -397,7 +400,7 @@ class SnowSolver:
             # these functions should update the acceleration field of the particles
             self.compute_internal_forces() # Step 1, includes Steps 2-5
             # print("before solve a")
-            # self.solve_a_lambda(deltaTime) # Step 6
+            self.solve_a_lambda(deltaTime) # Step 6
             # self.solve_a_G()             #Step 7 
             self.integrate_velocity(deltaTime) # Step 8-9
             self.integrate_deformation_gradient(deltaTime) #Step 10-11
@@ -409,18 +412,11 @@ class SnowSolver:
         self.update_position(deltaTime)
         # print("Step")
 
-    def step(self, deltaTime):
+    def step(self, deltaTime, time):
         self.ps.update_grid()
-        self.ps.color_neighbors(0, ti.Vector([1.0, 0.0, 0.0]))
-        # self.ps.color_neighbors(9, ti.Vector([0.0, 1.0, 0.0]))
-        # self.ps.color_neighbors(99, ti.Vector([1.0, 5.0, 0.0]))
-        # self.ps.color_neighbors(90, ti.Vector([0.0, 0.0, 1.0]))
-        # self.ps.color_neighbors(909, ti.Vector([1.0, 0.0, 1.0]))
-        # self.ps.color_neighbors(900, ti.Vector([0.5, 0.5, 1.0]))
-        # self.ps.color_neighbors(990, ti.Vector([0.0, 1.0, 1.0]))
-        # self.ps.color_neighbors(999, ti.Vector([1.0, 0.0, 0.5]))
-        self.ps.color_b_neighbors(0, ti.Vector([1.0, 0.0, 1.0]))
-        self.compute_boundary_volumes()
+        
+        if time == 0.0:
+            self.compute_boundary_volumes()
         # self.ps.cumsum.run(self.ps.grid_particles_num)
         # self.ps.cumsum_indx()
         # self.ps.sort_particles()
@@ -431,6 +427,15 @@ class SnowSolver:
         self.substep(deltaTime)
         # enforce the boundary of the domain (and later rigid bodies)
         self.enforce_boundary_3D()
+        self.ps.color_neighbors(0, ti.Vector([1.0, 0.0, 0.0]))
+        # self.ps.color_neighbors(9, ti.Vector([0.0, 1.0, 0.0]))
+        # self.ps.color_neighbors(99, ti.Vector([1.0, 5.0, 0.0]))
+        # self.ps.color_neighbors(90, ti.Vector([0.0, 0.0, 1.0]))
+        # self.ps.color_neighbors(909, ti.Vector([1.0, 0.0, 1.0]))
+        # self.ps.color_neighbors(900, ti.Vector([0.5, 0.5, 1.0]))
+        # self.ps.color_neighbors(990, ti.Vector([0.0, 1.0, 1.0]))
+        # self.ps.color_neighbors(999, ti.Vector([1.0, 0.0, 0.5]))
+        self.ps.color_b_neighbors(0, ti.Vector([1.0, 0.0, 1.0]))
         # update time
         self.time += deltaTime
         # print(self.ps.position[0])
