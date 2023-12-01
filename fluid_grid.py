@@ -76,3 +76,23 @@ class FluidGrid:
                 p_j = self.grid[current_arr, j] # Get point idx
                 if i[0] != p_j and (positions[i] - positions[p_j]).norm() < h:
                     func(i, p_j, ret)
+
+    @ti.func
+    def for_all_b_neighbors(self, i, position: ti.template(), b_positions: ti.template(), func : ti.template(), ret : ti.template(), h):
+        '''
+            to be used for computing boundary particles contributing to fluid particless
+        '''
+        grid_idx = self.to_grid_idx(position)
+        
+        ###Iterate over all neighbours of grid cell i
+        for g in ti.grouped(ti.ndrange(*((-1, 2),) * 3)):
+            current_grid = (
+                ti.math.clamp(grid_idx[0] + g[0], 0, self.grid_size_x),
+                ti.math.clamp(grid_idx[1] + g[1], 0, self.grid_size_y),
+                ti.math.clamp(grid_idx[2] + g[2], 0, self.grid_size_z)
+            )
+            current_arr = self.grid_to_array_index(current_grid[0], current_grid[1], current_grid[2])
+            for j in range(self.grid[current_arr].length()):
+                p_j = self.grid[current_arr, j] # Get point idx
+                if (position - b_positions[p_j]).norm() < h:
+                    func(i, p_j, ret)
