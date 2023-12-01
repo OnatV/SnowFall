@@ -4,6 +4,7 @@ import numpy as np
 from taichi.math import vec2, vec3, mat3
 from particle_system import ParticleSystem
 from pressure_solver import PressureSolver
+from kernels import cubic_kernel, cubic_kernel_derivative
 
 @ti.func
 def mult_scalar_matrix(c:float, A: mat3 ):
@@ -24,72 +25,75 @@ class SnowSolver:
         # self.a_other = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.wind_enabled = ps.enable_wind
         self.numerical_eps = 1e-6
-        self.init_kernel_lookup()
+        # self.init_kernel_lookup()
 
+    @ti.func
+    def helper_boundary_volume(self, i, j, sum: ti.template()):
+        sum += cubic_kernel(self.ps.boundary_particles[i] - self.ps.boundary_particles[j], self.ps.smoothing_radius)
 
     @ti.kernel
     def compute_boundary_volumes(self):
-        for i in ti.grouped(self.ps.boundary_particles):
+        for i in range(self.ps.num_b_particles):
             kernel_sum = 0.0
             for j in range(self.ps.num_b_particles):
-                if i[0] == j: continue
+                if i == j: continue
                 if (self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm() > self.ps.smoothing_radius: continue
-                kernel_sum += self.cubic_kernel((self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm())
+                kernel_sum += cubic_kernel((self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm(), self.ps.smoothing_radius)
             self.ps.boundary_particles_volume[i] = 0.8 * self.ps.bgrid_x ** 3 * (1.0 / kernel_sum)
 
-    def init_kernel_lookup(self, table_size = 100, grad_table_size = 100):
-        self.kernel_table = ti.field(dtype=float, shape=table_size)
-        self.grad_kernel_table = ti.Vector.field(dtype=float, n=3, shape=grad_table_size)
-        dh = self.ps.smoothing_radius / table_size
-        grad_dh = self.ps.smoothing_radius / table_size
-        @ti.kernel
-        def set_values(): 
-            for i in range(table_size):
-                r = i * dh
-                self.kernel_table[i] = self.cubic_kernel(r) 
-            for i in range(table_size):
-                r = i * grad_dh
-                tmp = self.cubic_kernel_derivative(ti.Vector([r, 0.0, 0.0]))
-                self.grad_kernel_table[i] = tmp.x
-        set_values()
+    # def init_kernel_lookup(self, table_size = 100, grad_table_size = 100):
+    #     self.kernel_table = ti.field(dtype=float, shape=table_size)
+    #     self.grad_kernel_table = ti.Vector.field(dtype=float, n=3, shape=grad_table_size)
+    #     dh = self.ps.smoothing_radius / table_size
+    #     grad_dh = self.ps.smoothing_radius / table_size
+    #     @ti.kernel
+    #     def set_values(): 
+    #         for i in range(table_size):
+    #             r = i * dh
+    #             self.kernel_table[i] = cubic_kernel(r) 
+    #         for i in range(table_size):
+    #             r = i * grad_dh
+    #             tmp = cubic_kernel_derivative(ti.Vector([r, 0.0, 0.0]))
+    #             self.grad_kernel_table[i] = tmp.x
+    #     set_values()
 
     
     # gives an approixmation self.of W(r), r = |xj - xi|
     # given the table of precomputed values
     # interpolation is.. nearest neighbor
     # assume r_norm >= 0
-    @ti.func
-    def kernel_lookup(self, r_norm):
-        tsize = self.kernel_table.shape[0]
-        h = self.ps.smoothing_radius
-        dh = h / tsize
-        result = ti.f32(0.0)
-        if (r_norm >= h):
-            result = 0
-        else:
-            i = ti.i32(ti.floor(r_norm / dh))
-            result = self.kernel_table[i]
-        return result
-    # kernel_table[i] is W(i*dh)
-    # W(r_rnorm) is needed
-    # -> rnorm = i*dh
-    # rnorm / dh == i
+    # @ti.func
+    # def kernel_lookup(self, r_norm):
+    #     tsize = self.kernel_table.shape[0]
+    #     h = self.ps.smoothing_radius
+    #     dh = h / tsize
+    #     result = ti.f32(0.0)
+    #     if (r_norm >= h):
+    #         result = 0
+    #     else:
+    #         i = ti.i32(ti.floor(r_norm / dh))
+    #         result = self.kernel_table[i]
+    #     return result
+    # # kernel_table[i] is W(i*dh)
+    # # W(r_rnorm) is needed
+    # # -> rnorm = i*dh
+    # # rnorm / dh == i
 
-    @ti.func
-    def grad_kernel_lookup(self, r:vec3) -> vec3:
-        r_norm = r.norm()
-        tsize = self.kernel_table.shape[0]
-        h = self.ps.smoothing_radius
-        dh = h / tsize
-        result = vec3(0.0, 0.0, 0.0)
-        if (r_norm >= h):
-            pass
-        else:
-            i = ti.i32(ti.floor(r_norm / dh))
-            grad_magnitude = self.grad_kernel_table[i]
-            grad_dir = r / r_norm
-            result = grad_magnitude * grad_dir
-        return result
+    # @ti.func
+    # def grad_kernel_lookup(self, r:vec3) -> vec3:
+    #     r_norm = r.norm()
+    #     tsize = self.kernel_table.shape[0]
+    #     h = self.ps.smoothing_radius
+    #     dh = h / tsize
+    #     result = vec3(0.0, 0.0, 0.0)
+    #     if (r_norm >= h):
+    #         pass
+    #     else:
+    #         i = ti.i32(ti.floor(r_norm / dh))
+    #         grad_magnitude = self.grad_kernel_table[i]
+    #         grad_dir = r / r_norm
+    #         result = grad_magnitude * grad_dir
+    #     return result
 
     @ti.kernel
     def enforce_boundary_3D(self):
@@ -107,44 +111,6 @@ class SnowSolver:
             if self.ps.position[i].z > self.ps.domain_end[2]:
                 self.ps.position[i].z = self.ps.domain_end[2] - self.ps.padding
 
-    @ti.func
-    def cubic_kernel(self, r_norm):
-        # implementation details borrowed from SPH_Taichi
-        # use ps.smoothing_radius to calculate the kernel weight of particles
-        # for now, sum over nearby particles
-        w = ti.cast(0.0, ti.f32)
-        h = self.ps.smoothing_radius
-        k = 8 / np.pi
-        k /= ti.pow(h, self.ps.dim)
-        q = r_norm / h
-        if q <= 1.0:
-            if q <= 0.5:
-                q2 = ti.pow(q, 2)
-                q3 = ti.pow(q, 3)
-                w = k * (6.0 * q3 - 6.0 * q2 + 1)
-            else:
-                w = k * 2 * ti.pow(1 - q, 3.0)
-        return w
-    
-    @ti.func    
-    def cubic_kernel_derivative(self, r:vec3) -> vec3:
-        # use ps.smoothing_radius to calculate the derivative of kernel weight of particles
-        # for now, sum over nearby particles
-        h = self.ps.smoothing_radius
-        k = 8.0 / np.pi
-        k = 6.0 * k / ti.pow(h, self.ps.dim)
-        l = 48.0 / np.pi
-        r_norm = r.norm()
-        q = r_norm / h
-        d_w = ti.Vector([0.0, 0.0, 0.0])
-        if r_norm > 1e-5 and q <= 1.0:
-            grad_q = r / (r_norm * h)
-            if q < 0.5:
-                d_w = l * q * (3.0 * q - 2.0) * grad_q
-            else:
-                f = 1.0 - q
-                d_w = l * (-f * f) * grad_q
-        return d_w
 
     @ti.kernel
     def simple_gravity_accel(self):
@@ -199,16 +165,16 @@ class SnowSolver:
         self.ps.for_all_neighbors(i, self.calc_density, density_i)
         self.ps.density[i] = density_i
 
-        detF = ti.Matrix.determinant(self.ps.deformation_gradient[i])
-        detf = 1.0 ## there is a bug with detF
-        self.ps.rest_density[i] = self.ps.density[i] * ti.abs(detF)
-        assert(self.ps.density[i] == self.ps.rest_density[i])
+        detF = ti.abs(ti.Matrix.determinant(self.ps.deformation_gradient[i]))
+        detF = 1.0 ## there is a bug with detF
+        self.ps.rest_density[i] = self.ps.density[i] * detF
+        assert(self.ps.rest_density[i] == self.ps.density[i]) # remove this once the bug with detF is fixed
 
     @ti.func
     def calc_density(self, i_idx, j_idx, d:ti.template()):
         rnorm = ti.Vector.norm(self.ps.position[i_idx] - self.ps.position[j_idx])
-        # d +=  self.cubic_kernel(rnorm) * ti.cast(self.ps.m_k, ti.f32)
-        d += self.cubic_kernel(rnorm) * self.ps.m_k
+        # d +=  cubic_kernel(rnorm) * ti.cast(self.ps.m_k, ti.f32)
+        d += cubic_kernel(rnorm, self.ps.smoothing_radius) * self.ps.m_k
         
     #calculate V_i = m_i / density_i
     @ti.func
@@ -248,7 +214,7 @@ class SnowSolver:
 
         '''
         pressure_solver = PressureSolver(self.ps)
-        sucess = pressure_solver.solve()
+        success = pressure_solver.solve(deltaTime)
         self.compute_a_lambda(success)
 
     @ti.func
@@ -257,7 +223,7 @@ class SnowSolver:
             Helper of self.compute_correction_matrix
         '''
         x_ij = self.ps.position[i_idx] - self.ps.position[j_idx] # x_ij: vec3
-        w_ij = self.cubic_kernel_derivative(x_ij)
+        w_ij = cubic_kernel_derivative(x_ij, self.ps.smoothing_radius)
         v_j = self.get_volume(j_idx)
 
         res += (v_j * w_ij).outer_product(x_ij)
@@ -383,7 +349,7 @@ class SnowSolver:
         else:
             L_i = self.ps.correction_matrix[i_idx]
 
-        del_w_ij = self.cubic_kernel_derivative(x_ij)
+        del_w_ij = cubic_kernel_derivative(x_ij, self.ps.smoothing_radius)
         corrected_del_w_ij = L_i @ del_w_ij
 
         res += (v_j - v_i).outer_product(V_j * corrected_del_w_ij)
@@ -397,7 +363,7 @@ class SnowSolver:
         v_j = self.ps.velocity[j_idx] # v_j: vec3
         v_i = self.ps.velocity[i_idx] # v_i: vec3
         x_ij = self.ps.position[i_idx] - self.ps.position[j_idx] # x_ij: vec3
-        del_w_ij = self.cubic_kernel_derivative(x_ij) # del_w_ij: vec3
+        del_w_ij = cubic_kernel_derivative(x_ij, self.ps.smoothing_radius) # del_w_ij: vec3
         V_j = self.get_volume(j_idx) # V_j: float
 
         res += (v_j - v_i).outer_product(V_j * del_w_ij)
@@ -467,7 +433,7 @@ class SnowSolver:
         self.enforce_boundary_3D()
         # update time
         self.time += deltaTime
-        print(self.ps.position[0])
+        # print(self.ps.position[0])
         print("Step")
 
     

@@ -1,19 +1,22 @@
 import taichi as ti
-
+import numpy as np
 from particle_system import ParticleSystem
+from kernels import cubic_kernel, cubic_kernel_derivative
+
 
 @ti.data_oriented
 class PressureSolver:
     def __init__(self, ps: ParticleSystem):
         self.ps = ps
+        self.numerical_eps = 1e-5
 
     @ti.func
     def vel_div(self, i, k, sum:ti.template()):
-        sum += self.get_volume(k) * (self.ps.velocity_star[k] - self.ps.velocity_star[i]).dot(self.cubic_kernel_derivative(self.ps.position[i]-self.ps.position[k]))
+        sum += self.get_volume(k) * (self.ps.velocity_star[k] - self.ps.velocity_star[i]).dot(cubic_kernel_derivative(self.ps.position[i]-self.ps.position[k], self.ps.smoothing_radius))
 
     @ti.func
     def vel_div_b(self, i, b, sum:ti.template()):
-        sum += self.ps.boundary_particles_volume[b] * (-self.ps.velocity_star[i]).dot(self.cubic_kernel_derivative(self.ps.position[i]-self.ps.boundary_particles[b]))
+        sum += self.ps.boundary_particles_volume[b] * (-self.ps.velocity_star[i]).dot(cubic_kernel_derivative(self.ps.position[i]-self.ps.boundary_particles[b], self.ps.smoothing_radius))
 
 
     # consider: https://en.wikipedia.org/wiki/Jacobi_method
@@ -39,14 +42,14 @@ class PressureSolver:
 
     @ti.func
     def helper_diff_of_pressure_grad(self, i, j, sum:ti.template()):
-        sum += self.get_volume(j) * (self.ps.pressure_gradient[j] - self.ps.pressure_gradient[i]).dot(self.cubic_kernel_derivative(
-            self.ps.position[i] - self.ps.position[j])
+        sum += self.get_volume(j) * (self.ps.pressure_gradient[j] - self.ps.pressure_gradient[i]).dot(cubic_kernel_derivative(
+            self.ps.position[i] - self.ps.position[j], self.ps.smoothing_radius)
         )
 
     @ti.func
     def helper_diff_of_pressure_grad_b(self, i, b, sum:ti.template()):
-        sum += (self.ps.boundary_particles_volume[b] * (-self.ps.pressure_gradient[i]).dot(self.cubic_kernel_derivative(
-            self.ps.position[i] - self.ps.boundary_particles[b])
+        sum += (self.ps.boundary_particles_volume[b] * (-self.ps.pressure_gradient[i]).dot(cubic_kernel_derivative(
+            self.ps.position[i] - self.ps.boundary_particles[b], self.ps.smoothing_radius)
         ))
 
 
@@ -62,25 +65,25 @@ class PressureSolver:
 
     @ti.func
     def helper_sum_of_pressure(self, i, j, sum:ti.template()):
-        sum += (self.ps.pressure[j] + self.ps.pressure[i]) * self.get_volume(j) * self.cubic_kernel_derivative(
-            self.ps.position[i] - self.ps.position[j]
+        sum += (self.ps.pressure[j] + self.ps.pressure[i]) * self.get_volume(j) * cubic_kernel_derivative(
+            self.ps.position[i] - self.ps.position[j], self.ps.smoothing_radius
         )
 
     @ti.func
     def helper_ViVj(self, i, j, sum: ti.template()):
-        sum += self.get_volume(i) * self.get_volume(j) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[j]).norm_sqr()
+        sum += self.get_volume(i) * self.get_volume(j) * cubic_kernel_derivative(self.ps.position[i] - self.ps.position[j], self.ps.smoothing_radius).norm_sqr()
     
     @ti.func
     def helper_Vj(self, i, j, sum:ti.template()):
-        sum += self.get_volume(j) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[j])
+        sum += self.get_volume(j) * cubic_kernel_derivative(self.ps.position[i] - self.ps.position[j], self.ps.smoothing_radius)
 
     @ti.func
     def helper_Vb(self, i, b, sum:ti.template()):
-        sum += self.ps.boundary_particles_volume[b] * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.boundary_particles[b])
+        sum += self.ps.boundary_particles_volume[b] * cubic_kernel_derivative(self.ps.position[i] - self.ps.boundary_particles[b], self.ps.smoothing_radius)
 
     # @ti.func
     # def helper_sum_over_k(self, i, k, sum:ti.template()):
-    #     sum += self.get_volume(k) * self.cubic_kernel_derivative(self.ps.position[i] - self.ps.position[k])
+    #     sum += self.get_volume(k) * cubic_kernel_derivative(self.ps.position[i] - self.ps.position[k])
         
     @ti.func
     def compute_jacobian_diagonal_entry(self, i, deltaTime):
@@ -118,8 +121,7 @@ class PressureSolver:
             # print("setting p_star:", self.ps.p_star[i])
             self.compute_jacobian_diagonal_entry(i, deltaTime)
 
-    @ti.kernel
-    def implicit_pressure_solve(self, deltaTime:float):
+    def implicit_pressure_solve(self, deltaTime:float) -> bool:
         max_iterations = 100
         min_iterations = 5 # in paper, seemed to converge in 5 iterations or less
         is_solved = False
@@ -145,7 +147,7 @@ class PressureSolver:
             it = it + 1
         return is_solved       
 
-    @ti.func
+    @ti.kernel
     def implicit_pressure_solver_step(self, deltaTime:float)->ti.f32:
         density_error = ti.Vector([0.0])
         for i in ti.grouped(self.ps.position):
@@ -154,8 +156,11 @@ class PressureSolver:
             self.compute_A_p(i, deltaTime, density_error)
         return density_error / self.ps.num_particles
 
+    @ti.func
+    def get_volume(self, i):
+        return (self.ps.m_k / ti.math.max(self.ps.rest_density[i], self.numerical_eps ) )
     
-    def solve():
+    def solve(self, deltaTime):
         self.implicit_solver_prepare(deltaTime)
         success = self.implicit_pressure_solve(deltaTime)
         return success

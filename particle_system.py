@@ -85,9 +85,9 @@ class ParticleSystem:
         self.bgrid_x = int(self.domain_size[0] / self.boundary_particle_radius)
         self.bgrid_z = int(self.domain_size[2] / self.boundary_particle_radius)
         self.num_b_particles = self.bgrid_x * self.bgrid_z
-        self.boundary_particles = ti.Vector.field(self.dim, float,  shape=self.num_b_particles)
+        self.boundary_particles = ti.Vector.field(self.dim, dtype=float,  shape=self.num_b_particles)
         self.boundary_particles_volume = ti.field(float,  shape=self.num_b_particles)
-        self.boundary_colors = ti.Vector.field(self.dim, float, shape=self.num_b_particles)
+        self.boundary_colors = ti.Vector.field(self.dim, dtype=float, shape=self.num_b_particles)
         
         self.velocity_star = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles) #@@
 
@@ -103,7 +103,7 @@ class ParticleSystem:
         ])
         self.colors = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
 
-    @ti.kernel
+    # @ti.kernel
     def initialize_particle_block(self):
         block_length = int(np.floor(np.cbrt(self.num_particles)))
         print("Block length", block_length)
