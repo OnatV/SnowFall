@@ -27,7 +27,8 @@ class SnowSolver:
         self.numerical_eps = 1e-6
         self.m_psi = 10
         # self.init_kernel_lookup()
-        self.boundary_correction_factor = 10.0
+        # TO DO: COMPUTE ADAPTIVE CORRECTION FACTORR
+        self.boundary_correction_factor = 12.0
 
     @ti.func
     def helper_boundary_volume(self, i, j, sum: ti.template()):
@@ -227,13 +228,14 @@ class SnowSolver:
     @ti.kernel
     def compute_a_lambda(self, success : ti.template()):
         for i in ti.grouped(self.ps.position):
-            if self.ps.density[i] == 0.0:
-                continue
-            if not success:
-                return
             a_lambda = ti.Vector([0.0, 0.0, 0.0])
-            self.ps.for_all_neighbors(i, self.helper_a_lambda_fluid_neighbors, a_lambda)
-            self.ps.for_all_b_neighbors(i, self.helper_a_lambda_b, a_lambda)
+            if not success:
+                a_lambda = ti.Vector([0.0, 0.0, 0.0])
+            else:
+                self.ps.for_all_neighbors(i, self.helper_a_lambda_fluid_neighbors, a_lambda)
+                self.ps.for_all_b_neighbors(i, self.helper_a_lambda_b, a_lambda)
+                
+                # a_lambda = -1.0 / self.ps.density[i] * self.ps.pressure_gradient[i]
             self.ps.acceleration[i] += a_lambda
             if i[0] == 0:
                 print("a_lambda", a_lambda)

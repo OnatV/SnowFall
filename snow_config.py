@@ -47,6 +47,11 @@ class SnowConfig:
 
         if 'BLOCK' in config.keys():
             self.block_origin = list2vec(config['BLOCK']['position'])
+            self.block_length = float(config['BLOCK']['length'])
+            self.block_width = float(config['BLOCK']['width'])
+            self.block_height = float(config['BLOCK']['height'])
+            self.num_particles = int((self.block_length / self.particle_radius) * (self.block_width / self.particle_radius) * (self.block_height / self.particle_radius))
+
         print(self.initialize_type)
 def list2vec(strlist: str):
     return np.array(json.loads(strlist))

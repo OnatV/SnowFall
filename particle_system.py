@@ -107,18 +107,17 @@ class ParticleSystem:
 
     # @ti.kernel
     def initialize_particle_block(self):
-        block_length = int(np.floor(np.cbrt(self.num_particles)))
-        print("Block length", block_length)
+        # print("Block length", block_length)
         block_position = self.cfg.block_origin
         for i in range(self.num_particles):
             self.position[i] = ti.Vector([0.0, 0.0, 0.0])
-        for i in range(block_length):
-            for j in range(block_length):
-                for k in range(block_length):
+        for i in range(int(self.cfg.block_length / self.particle_radius)):
+            for j in range(int(self.cfg.block_width / self.particle_radius)):
+                for k in range(int(self.cfg.block_height / self.particle_radius)):
                     x = i * (self.particle_radius) + block_position[0]
                     y = j * (self.particle_radius) + block_position[1]
                     z = k * (self.particle_radius) + block_position[2]
-                    self.position[i * block_length * block_length + j * block_length + k] = ti.Vector([x, y, z])
+                    self.position[int(k * (self.cfg.block_length / self.particle_radius) * (self.cfg.block_width / self.particle_radius) + j * (self.cfg.block_length / self.particle_radius) + i)] = ti.Vector([x, z, y])
 
     @ti.kernel
     def initialize_random_particles(self):
