@@ -1,4 +1,5 @@
 import taichi as ti
+import pytest
 from fluid_grid import FluidGrid
 from numpy.random import random
 
@@ -38,7 +39,8 @@ def test_one_particle_position(num=10):
         print("idx", flat_idx(positions[i]))
         assert grid_contains(i, flat_idx(positions[i]), fg.grid)
 
-def test_neighbors_2():
+@pytest.mark.parametrize("border", [(True,), (False, )])
+def test_neighbors_2(border):
     '''
         tests that point 1 is in fact a neighbor of point 0
     '''
@@ -47,10 +49,14 @@ def test_neighbors_2():
     end_point = ti.Vector([1.0]*3)
     fg = FluidGrid(origin, end_point, 2 * h)
     positions = ti.Vector.field(3, float, shape=2)
-    positions[0] = origin
-    positions[1] = origin + h / 2
-    fg.update_grid(positions)
     
+    if not border:
+        positions[0] = origin + 0.3
+    else:
+        positions[0] = origin
+    positions[1] = positions[0] + (h / 2)
+    fg.update_grid(positions)
+
     @ti.func
     def count_neighbors(i, j, sum:ti.template()):
         sum += 1
