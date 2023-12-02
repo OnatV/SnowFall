@@ -78,6 +78,7 @@ class FluidGrid:
             current_arr = ti.math.min(self.num_cells - 1, current_arr) # guard against particles that are outside the grid
             current_arr = ti.math.max(0, current_arr)
             #ti.loop_config(serialize=True)
+            # print("h")
             for j in range(self.grid[current_arr].length()):
                 p_j = self.grid[current_arr, j] # Get point idx
                 if i[0] != p_j and (positions[i] - positions[p_j]).norm() < h:
