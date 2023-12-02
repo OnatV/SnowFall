@@ -38,8 +38,8 @@ class SnowSolver:
             kernel_sum = 0.0
             for j in range(self.ps.num_b_particles):
                 if i == j: continue
-                if (self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm() > self.ps.boundary_smoothing_radius: continue
-                kernel_sum += cubic_kernel((self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm(), self.ps.boundary_smoothing_radius)
+                if (self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm() > self.ps.smoothing_radius: continue
+                kernel_sum += cubic_kernel((self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm(), self.ps.smoothing_radius)
             # self.ps.boundary_particles_volume[i] = 0.8 * self.ps.boundary_particle_radius ** 3 * (1.0 / kernel_sum)
             self.ps.boundary_particles_volume[i] = 0.8 * (1.0 / kernel_sum) # which is it? Gissler et al v4 does not include h, but v1 does!!
 
@@ -166,7 +166,8 @@ class SnowSolver:
         density_i = 0.0
         self.ps.for_all_neighbors(i, self.calc_density, density_i)
         self.ps.density[i] = density_i
-
+        if i[0] == 0:
+            print("density", density_i)
         detF = ti.abs(ti.Matrix.determinant(self.ps.deformation_gradient[i]))
         # print("detF", detF)
         # detF = 1.0 ## there is a bug with detF
@@ -183,7 +184,28 @@ class SnowSolver:
     def get_volume(self, i):
         return (self.ps.m_k / ti.math.max(self.ps.rest_density[i], self.numerical_eps ) )
 
-    
+    @ti.func
+    def helper_a_lambda_fluid_neighbors(self, i, j, sum:ti.template()):
+        Vj = self.get_volume(j)
+        density_i = self.ps.density[i] / 400
+        density_i2 = density_i * density_i
+        dpi = self.ps.pressure[i] / (400 * density_i2)
+        density_j = self.ps.density[j] / self.ps.rest_density[j]
+        density_j2 = density_j * density_j
+        dpj = (self.ps.pressure[j] / self.ps.rest_density[j]) / density_j2
+        sum -= Vj * (dpi + self.ps.rest_density[j] / 400 * dpj) * cubic_kernel_derivative(
+            self.ps.position[i] - self.ps.position[j], self.ps.smoothing_radius
+        )
+
+    @ti.func 
+    def helper_a_lambda_b(self, i, j, sum: ti.template()):
+        density_i = self.ps.density[i] / 400
+        density_i2 = density_i * density_i
+        dpi = self.ps.pressure[i] / (400 * density_i2)
+        a = self.ps.boundary_particles_volume[j] * dpi * cubic_kernel_derivative(
+            self.ps.position[i] - self.ps.boundary_particles[j], self.ps.smoothing_radius
+        )
+        sum -= 1000.0 * a
     
     @ti.kernel
     def compute_a_lambda(self, success : ti.template()):
@@ -192,9 +214,12 @@ class SnowSolver:
                 continue
             if not success:
                 self.ps.pressure_gradient[i] = 0
-            self.ps.acceleration[i] += (-1.0 / ti.math.max(self.ps.density[i], self.numerical_eps)) * self.ps.pressure_gradient[i]
+            a_lambda = ti.Vector([0.0, 0.0, 0.0])
+            self.ps.for_all_neighbors(i, self.helper_a_lambda_fluid_neighbors, a_lambda)
+            self.ps.for_all_b_neighbors(i, self.helper_a_lambda_b, a_lambda)
+            self.ps.acceleration[i] += a_lambda
             if i[0] == 0:
-                print("a_lambda", (-1.0 / ti.math.max(self.ps.density[i], self.numerical_eps)) * self.ps.pressure_gradient[i])
+                print("a_lambda", a_lambda)
     
     @ti.func
     def nan_check(self) -> bool:
@@ -437,10 +462,10 @@ class SnowSolver:
         # self.ps.color_neighbors(900, ti.Vector([0.5, 0.5, 1.0]))
         # self.ps.color_neighbors(990, ti.Vector([0.0, 1.0, 1.0]))
         # self.ps.color_neighbors(999, ti.Vector([1.0, 0.0, 0.5]))
-        self.ps.color_b_neighbors(0, ti.Vector([1.0, 0.0, 1.0]))
+        # self.ps.color_b_neighbors(0, ti.Vector([1.0, 0.0, 1.0]))
         # update time
         self.time += deltaTime
         # print(self.ps.position[0])
-        print("Step")
+        print("Step", self.ps.position[0][1] - 0.35)
 
     
