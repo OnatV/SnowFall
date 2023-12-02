@@ -230,7 +230,7 @@ class SnowSolver:
             if self.ps.density[i] == 0.0:
                 continue
             if not success:
-                self.ps.pressure_gradient[i] = 0
+                return
             a_lambda = ti.Vector([0.0, 0.0, 0.0])
             self.ps.for_all_neighbors(i, self.helper_a_lambda_fluid_neighbors, a_lambda)
             self.ps.for_all_b_neighbors(i, self.helper_a_lambda_b, a_lambda)
