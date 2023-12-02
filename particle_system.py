@@ -1,5 +1,6 @@
 import taichi as ti
 import numpy as np
+import configparser
 
 from snow_config import SnowConfig
 from fluid_grid import FluidGrid
@@ -81,10 +82,10 @@ class ParticleSystem:
         self.grid_num_particles = ti.field(dtype=int, shape=(self.grid_size))  ##Holds the number of particles at each grid point
         self.particle_to_grid = ti.field(dtype=int, shape=self.num_particles)        ##Holds the grid point index of each particle, currently not needed because we
         self.padding = 0.1 * self.grid_spacing
-
+        self.boundary_particle_spacing = self.boundary_particle_radius # important quantity for figuring out boundary volume
         # boundary particles
-        self.bgrid_x = int(self.domain_size[0] / (0.5 * self.boundary_particle_radius))
-        self.bgrid_z = int(self.domain_size[2] / (0.5 * self.boundary_particle_radius))
+        self.bgrid_x = int(self.domain_size[0] / (self.boundary_particle_spacing))
+        self.bgrid_z = int(self.domain_size[2] / (self.boundary_particle_spacing))
         self.num_b_particles = self.bgrid_x * self.bgrid_z
         self.boundary_particles = ti.Vector.field(self.dim, dtype=float,  shape=self.num_b_particles)
         self.boundary_particles_volume = ti.field(float,  shape=self.num_b_particles)
@@ -108,15 +109,15 @@ class ParticleSystem:
     def initialize_particle_block(self):
         block_length = int(np.floor(np.cbrt(self.num_particles)))
         print("Block length", block_length)
-        grid_origin = ((self.domain_end - self.domain_start) / 2.0) - ((self.particle_radius * block_length) / 2.0)
+        block_position = self.cfg.block_origin
         for i in range(self.num_particles):
             self.position[i] = ti.Vector([0.0, 0.0, 0.0])
         for i in range(block_length):
             for j in range(block_length):
                 for k in range(block_length):
-                    x = i * (0.3 * self.particle_radius) + grid_origin[0]
-                    y = j * (0.3 * self.particle_radius) + grid_origin[1]
-                    z = k * (0.3 * self.particle_radius) + grid_origin[2]
+                    x = i * (0.3 * self.particle_radius) + block_position[0]
+                    y = j * (0.3 * self.particle_radius) + block_position[1]
+                    z = k * (0.3 * self.particle_radius) + block_position[2]
                     self.position[i * block_length * block_length + j * block_length + k] = ti.Vector([x, y, z])
 
     @ti.kernel
@@ -128,6 +129,14 @@ class ParticleSystem:
             z = (self.domain_size[2] - self.domain_size[2] * 0.1)  * ti.random(dtype=float) + self.domain_size[2] * 0.1
             self.position[i] = ti.Vector([x, y, z])
 
+    # simple helper to initialize deformation gradient as the identity
+    @ti.kernel
+    def gradient_initialize(self):
+        # mat = ti.Matrix(m=3, n=3, dtype=float)
+        for i in range(self.num_particles):
+            self.deformation_gradient[i] = ti.Matrix.identity(float, 3)
+
+
     def initialize_fields(self):
         print("initializing particle positions...")
         if self.initialize_type == 'block':
@@ -135,6 +144,7 @@ class ParticleSystem:
         else:
             self.initialize_random_particles()
         self.fluid_grid.update_grid(self.position)
+        # initialize starting quantities
         for i in range(self.num_particles):
             self.pressure[i] = 0.0
             self.colors[i] = ti.Vector([1.0, 1.0, 1.0])
@@ -149,6 +159,7 @@ class ParticleSystem:
             y = 0
             z = float(i % boundary_plane_num_z_dir) / (boundary_plane_num_z_dir - 1) * self.domain_size[2]
             self.boundary_particles[i] = ti.Vector([x, y, z])
+        self.gradient_initialize()
         print("Intialized!")
 
 
