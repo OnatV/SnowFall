@@ -25,6 +25,7 @@ class SnowSolver:
         # self.a_other = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.wind_enabled = ps.enable_wind
         self.numerical_eps = 1e-6
+        self.m_psi = 10
         # self.init_kernel_lookup()
 
     @ti.func
@@ -37,8 +38,8 @@ class SnowSolver:
             kernel_sum = 0.0
             for j in range(self.ps.num_b_particles):
                 if i == j: continue
-                if (self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm() > self.ps.smoothing_radius: continue
-                kernel_sum += cubic_kernel((self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm(), self.ps.smoothing_radius)
+                if (self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm() > self.ps.boundary_smoothing_radius: continue
+                kernel_sum += cubic_kernel((self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm(), self.ps.boundary_smoothing_radius)
             # self.ps.boundary_particles_volume[i] = 0.8 * self.ps.boundary_particle_radius ** 3 * (1.0 / kernel_sum)
             self.ps.boundary_particles_volume[i] = 0.8 * (1.0 / kernel_sum) # which is it? Gissler et al v4 does not include h, but v1 does!!
 
@@ -141,7 +142,7 @@ class SnowSolver:
         '''
             Section 3.3.2
         '''
-        young_mod = 20000
+        young_mod = 140000
         xi = 10
         nu = 0.2
         numerator = young_mod * nu
@@ -191,7 +192,7 @@ class SnowSolver:
                 continue
             if not success:
                 self.ps.pressure_gradient[i] = 0
-            # self.ps.acceleration[i] += (1.0 / ti.math.max(self.ps.density[i][0], self.numerical_eps)) * self.ps.pressure_gradient[i]
+            self.ps.acceleration[i] += (-1.0 / ti.math.max(self.ps.density[i], self.numerical_eps)) * self.ps.pressure_gradient[i]
             if i[0] == 0:
                 print("a_lambda", (-1.0 / ti.math.max(self.ps.density[i], self.numerical_eps)) * self.ps.pressure_gradient[i])
     
@@ -436,7 +437,7 @@ class SnowSolver:
         # self.ps.color_neighbors(900, ti.Vector([0.5, 0.5, 1.0]))
         # self.ps.color_neighbors(990, ti.Vector([0.0, 1.0, 1.0]))
         # self.ps.color_neighbors(999, ti.Vector([1.0, 0.0, 0.5]))
-        # self.ps.color_b_neighbors(0, ti.Vector([1.0, 0.0, 1.0]))
+        self.ps.color_b_neighbors(0, ti.Vector([1.0, 0.0, 1.0]))
         # update time
         self.time += deltaTime
         # print(self.ps.position[0])

@@ -40,7 +40,7 @@ class FluidGrid:
         '''
         This takes a 3D grid index and maps it to a 1D array index 
         '''
-        indx = z * self.grid_size_x * self.grid_size_y + y * self.grid_size_x + z
+        indx = z * self.grid_size_x * self.grid_size_y + y * self.grid_size_x + x
 
         return indx
 

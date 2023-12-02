@@ -1,0 +1,23 @@
+#lower mass
+eta 1.692368408203125
+snow contribution: [0.000000, 0.000000, 0.000000]
+boundary contribtion: [0.000000, -0.000000, 0.000000]
+pressure_gradient: [0.000000, 0.000000, 0.000000]
+snow contribution: [2.444511, 1.546959, 2.444511]
+boundary contribtion: [0.344036, -6.542821, 0.344036]
+pressure_gradient: [2.960564, -8.267272, 2.960564]
+snow contribution: [3.685156, 2.328578, 3.685156]
+boundary contribtion: [0.516467, -9.822096, 0.516467]
+pressure_gradient: [4.459856, -12.404565, 4.459856]
+
+# high mass
+eta 5.0771025390625
+snow contribution: [0.000000, 0.000000, 0.000000]
+boundary contribtion: [0.000000, -0.000000, 0.000000]
+pressure_gradient: [0.000000, 0.000000, 0.000000]
+snow contribution: [13.684189, 10.320090, 13.684178]
+boundary contribtion: [9.787338, -186.134216, 9.787337]
+pressure_gradient: [28.365196, -268.881226, 28.365185]
+snow contribution: [20.678255, 15.576013, 20.678268]
+boundary contribtion: [14.790801, -281.289368, 14.790800]
+pressure_gradient: [42.864456, -406.358032, 42.864468]

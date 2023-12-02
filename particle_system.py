@@ -13,11 +13,11 @@ class ParticleSystem:
         self.num_particles = self.cfg.num_particles
         self.domain_end = self.domain_start + self.domain_size
         self.particle_radius = self.cfg.particle_radius 
-        self.boundary_particle_radius = 0.05 # move to config
+        self.boundary_particle_radius = 0.02 # move to config
         self.dim = 3 # 3D simulation
         self.gravity = ti.Vector(self.cfg.gravity)
         self.temperature = -10.0 # degrees Celsuis
-        self.m_k = 4 * (self.particle_radius ** self.dim) * np.pi / (150) * 1000 # particle mass
+        self.m_k = 4 * (self.particle_radius ** self.dim) * np.pi / (50) * 200_000 # particle mass
         self.smoothing_radius = self.cfg.smoothing_radius_ratio * self.particle_radius
         self.boundary_smoothing_radius = self.boundary_particle_radius * 4.0
         self.wind_direction = ti.Vector(self.cfg.wind_direction)
@@ -82,10 +82,10 @@ class ParticleSystem:
         self.grid_num_particles = ti.field(dtype=int, shape=(self.grid_size))  ##Holds the number of particles at each grid point
         self.particle_to_grid = ti.field(dtype=int, shape=self.num_particles)        ##Holds the grid point index of each particle, currently not needed because we
         self.padding = 0.1 * self.grid_spacing
-        self.boundary_particle_spacing = self.boundary_particle_radius # important quantity for figuring out boundary volume
+        # self.boundary_particle_spacing = 0.5 * self.boundary_particle_radius # important quantity for figuring out boundary volume
         # boundary particles
-        self.bgrid_x = int(self.domain_size[0] / (self.boundary_particle_spacing))
-        self.bgrid_z = int(self.domain_size[2] / (self.boundary_particle_spacing))
+        self.bgrid_x = int(self.domain_size[0] / (self.boundary_particle_radius))
+        self.bgrid_z = int(self.domain_size[2] / (self.boundary_particle_radius))
         self.num_b_particles = self.bgrid_x * self.bgrid_z
         self.boundary_particles = ti.Vector.field(self.dim, dtype=float,  shape=self.num_b_particles)
         self.boundary_particles_volume = ti.field(float,  shape=self.num_b_particles)
@@ -115,9 +115,9 @@ class ParticleSystem:
         for i in range(block_length):
             for j in range(block_length):
                 for k in range(block_length):
-                    x = i * (0.3 * self.particle_radius) + block_position[0]
-                    y = j * (0.3 * self.particle_radius) + block_position[1]
-                    z = k * (0.3 * self.particle_radius) + block_position[2]
+                    x = i * (self.particle_radius) + block_position[0]
+                    y = j * (self.particle_radius) + block_position[1]
+                    z = k * (self.particle_radius) + block_position[2]
                     self.position[i * block_length * block_length + j * block_length + k] = ti.Vector([x, y, z])
 
     @ti.kernel
@@ -154,11 +154,17 @@ class ParticleSystem:
             self.boundary_colors[i] = ti.Vector([1.0, 1.0, 1.0])
         boundary_plane_num_z_dir = self.bgrid_z
         boundary_plane_num_x_dir = self.bgrid_x        
-        for i in range(self.num_b_particles):
+        for i in range(int(self.num_b_particles)):
             x = float(i // boundary_plane_num_z_dir) / (boundary_plane_num_x_dir - 1) * self.domain_size[0]
-            y = 0
+            y = 0.35
             z = float(i % boundary_plane_num_z_dir) / (boundary_plane_num_z_dir - 1) * self.domain_size[2]
             self.boundary_particles[i] = ti.Vector([x, y, z])
+        # print("first layer")
+        # for i in range(int(self.num_b_particles / 2)):
+        #     x = float(i // boundary_plane_num_x_dir) / (boundary_plane_num_x_dir - 1) * self.domain_size[0]
+        #     y = self.boundary_particle_radius
+        #     z = float(i % boundary_plane_num_z_dir) / (boundary_plane_num_z_dir - 1) * self.domain_size[2]
+        #     self.boundary_particles[i + int(self.num_b_particles / 2)] = ti.Vector([x, y, z])
         self.gradient_initialize()
         print("Intialized!")
 
@@ -288,6 +294,6 @@ class ParticleSystem:
     def draw_particles(self):
         self.scene.particles(self.position, color = (0.99, 0.99, 0.99), radius = 0.5 * self.particle_radius, per_vertex_color=self.colors)
         self.scene.particles(self.boundary_particles, per_vertex_color=self.boundary_colors,
-                              radius = 0.25*self.boundary_particle_radius)
+                              radius = 0.5*self.boundary_particle_radius)
 
 

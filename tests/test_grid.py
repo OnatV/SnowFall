@@ -45,9 +45,9 @@ def test_neighbors_2():
     ti.init(arch=ti.cpu, debug=True)
     origin = ti.Vector([0.0]*3)
     end_point = ti.Vector([1.0]*3)
-    fg = FluidGrid(origin, end_point, 2 * h)
+    fg = FluidGrid(origin, end_point, h)
     positions = ti.Vector.field(3, float, shape=2)
-    positions[0] = origin
+    positions[0] = origin + 0.12
     positions[1] = origin + h / 2
     fg.update_grid(positions)
     
