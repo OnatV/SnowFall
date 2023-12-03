@@ -118,8 +118,8 @@ class ParticleSystem:
             for j in range(int(len_z / self.particle_radius)):
                 for k in range(int(len_y / self.particle_radius)):
                     x = i * (self.particle_radius) + origin[0]
-                    y = j * (self.particle_radius) + origin[1]
-                    z = k * (self.particle_radius) + origin[2]
+                    y = j * (self.particle_radius) + origin[2]
+                    z = k * (self.particle_radius) + origin[1]
                     positions[int(k * (len_x / self.particle_radius) * (len_z / self.particle_radius) + j * (len_x / self.particle_radius) + i)] = ti.Vector([x, z, y])
 
     
