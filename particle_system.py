@@ -17,7 +17,8 @@ class ParticleSystem:
         self.dim = 3 # 3D simulation
         self.gravity = ti.Vector(self.cfg.gravity)
         self.temperature = -10.0 # degrees Celsuis
-        self.m_k = 4/3 * (self.particle_radius ** self.dim) * np.pi * 400 # particle mass
+        self.m_k = 4/3 * (self.particle_radius ** self.dim) * np.pi * 200 # particle mass
+        # self.m_k = 0.008
         self.smoothing_radius = self.cfg.smoothing_radius_ratio * self.particle_radius
         # self.boundary_smoothing_radius = self.boundary_particle_radius * 4.0
         self.wind_direction = ti.Vector(self.cfg.wind_direction)
