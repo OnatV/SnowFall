@@ -28,7 +28,7 @@ class SnowSolver:
         self.m_psi = 10
         # self.init_kernel_lookup()
         # TO DO: COMPUTE ADAPTIVE CORRECTION FACTORR
-        self.boundary_correction_factor = 7.0
+        self.boundary_correction_factor = 10.0
 
     # @ti.func
     # def compute_bounary_correction_factor(self):
@@ -165,10 +165,10 @@ class SnowSolver:
         # denom = (1 + nu) * (1 - 2.0*nu)
         # p0_t = self.ps.rest_density[i]
         # # what should p_0 be?
-        # p_0 = 400
+        # p_0 = self.ps.init_density
         # k = numerator / denom
         # self.ps.lambda_t_i[i] = k * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
-        self.ps.lambda_t_i[i] = 200_000
+        self.ps.lambda_t_i[i] = 100_000
 
     @ti.func
     def compute_rest_density(self, i):

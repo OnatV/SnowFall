@@ -34,6 +34,7 @@ class SnowConfig:
         self.wind_direction = list2vec(config['PHYSICS']['wind_direction'])
         self.theta_c = float(config['PHYSICS']['theta_c'])
         self.theta_s = float(config['PHYSICS']['theta_s'])
+        self.init_density = float(config['PHYSICS']['init_density'])
         # Simulation parameters
         self.num_particles = int(config['SIMULATION']['num_particles'])
         self.domain_size = list2vec(config['SIMULATION']['domain_size'])
