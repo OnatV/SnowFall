@@ -81,7 +81,7 @@ class FluidGrid:
             # print("h")
             for j in range(self.grid[current_arr].length()):
                 p_j = self.grid[current_arr, j] # Get point idx
-                if i[0] != p_j and (positions[i] - positions[p_j]).norm() < h:
+                if (positions[i] - positions[p_j]).norm() < h:
                     func(i, p_j, ret)
 
     @ti.func

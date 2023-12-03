@@ -28,7 +28,7 @@ class SnowSolver:
         self.m_psi = 10
         # self.init_kernel_lookup()
         # TO DO: COMPUTE ADAPTIVE CORRECTION FACTORR
-        self.boundary_correction_factor = 1.0
+        self.boundary_correction_factor = 7.0
 
     # @ti.func
     # def compute_bounary_correction_factor(self):
@@ -168,7 +168,7 @@ class SnowSolver:
         # p_0 = 400
         # k = numerator / denom
         # self.ps.lambda_t_i[i] = k * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
-        self.ps.lambda_t_i[i] = 2000000
+        self.ps.lambda_t_i[i] = 200_000
 
     @ti.func
     def compute_rest_density(self, i):
@@ -235,7 +235,10 @@ class SnowSolver:
     def compute_a_lambda(self, success : ti.template()):
         for i in ti.grouped(self.ps.position):
             a_lambda = ti.Vector([0.0, 0.0, 0.0])
-            if not success:
+            if not success or \
+            ti.math.isnan(self.ps.rest_density[i]) or \
+            ti.math.isnan(self.ps.pressure[i]) or \
+            self.ps.rest_density[i] == 0.0:
                 a_lambda = ti.Vector([0.0, 0.0, 0.0])
             else:
                 self.ps.for_all_neighbors(i, self.helper_a_lambda_fluid_neighbors, a_lambda)
