@@ -91,7 +91,7 @@ class SnowSolver:
 
     @ti.kernel
     def compute_boundary_volumes(self):
-        correction = 1.0
+        correction = 0.8
         for i in range(self.ps.num_b_particles):
             kernel_sum = 0.0
             for j in range(self.ps.num_b_particles):
@@ -102,75 +102,27 @@ class SnowSolver:
             self.ps.boundary_particles_volume[i] = correction * (1.0 / kernel_sum) # which is it? Gissler et al v4 does not include h, but v1 does!!
             
 
-    # def init_kernel_lookup(self, table_size = 100, grad_table_size = 100):
-    #     self.kernel_table = ti.field(dtype=float, shape=table_size)
-    #     self.grad_kernel_table = ti.Vector.field(dtype=float, n=3, shape=grad_table_size)
-    #     dh = self.ps.smoothing_radius / table_size
-    #     grad_dh = self.ps.smoothing_radius / table_size
-    #     @ti.kernel
-    #     def set_values(): 
-    #         for i in range(table_size):
-    #             r = i * dh
-    #             self.kernel_table[i] = cubic_kernel(r) 
-    #         for i in range(table_size):
-    #             r = i * grad_dh
-    #             tmp = cubic_kernel_derivative(ti.Vector([r, 0.0, 0.0]))
-    #             self.grad_kernel_table[i] = tmp.x
-    #     set_values()
-
-    
-    # gives an approixmation self.of W(r), r = |xj - xi|
-    # given the table of precomputed values
-    # interpolation is.. nearest neighbor
-    # assume r_norm >= 0
-    # @ti.func
-    # def kernel_lookup(self, r_norm):
-    #     tsize = self.kernel_table.shape[0]
-    #     h = self.ps.smoothing_radius
-    #     dh = h / tsize
-    #     result = ti.f32(0.0)
-    #     if (r_norm >= h):
-    #         result = 0
-    #     else:
-    #         i = ti.i32(ti.floor(r_norm / dh))
-    #         result = self.kernel_table[i]
-    #     return result
-    # # kernel_table[i] is W(i*dh)
-    # # W(r_rnorm) is needed
-    # # -> rnorm = i*dh
-    # # rnorm / dh == i
-
-    # @ti.func
-    # def grad_kernel_lookup(self, r:vec3) -> vec3:
-    #     r_norm = r.norm()
-    #     tsize = self.kernel_table.shape[0]
-    #     h = self.ps.smoothing_radius
-    #     dh = h / tsize
-    #     result = vec3(0.0, 0.0, 0.0)
-    #     if (r_norm >= h):
-    #         pass
-    #     else:
-    #         i = ti.i32(ti.floor(r_norm / dh))
-    #         grad_magnitude = self.grad_kernel_table[i]
-    #         grad_dir = r / r_norm
-    #         result = grad_magnitude * grad_dir
-    #     return result
-
     @ti.kernel
     def enforce_boundary_3D(self):
         for i in range(self.ps.num_particles):
             if self.ps.position[i].x < self.ps.domain_start[0]:
                 self.ps.position[i].x = self.ps.domain_start[0]
+                self.ps.velocity[i].x = 0
             if self.ps.position[i].y < self.ps.domain_start[1]:
                 self.ps.position[i].y = self.ps.domain_start[1]
+                self.ps.velocity[i].y = 0
             if self.ps.position[i].z < self.ps.domain_start[2]:
                 self.ps.position[i].z = self.ps.domain_start[2]
+                self.ps.velocity[i].z = 0
             if self.ps.position[i].x > self.ps.domain_end[0]:
                 self.ps.position[i].x = self.ps.domain_end[0]
+                self.ps.velocity[i].x = 0
             if self.ps.position[i].y > self.ps.domain_end[1]:
                 self.ps.position[i].y = self.ps.domain_end[1]
+                self.ps.velocity[i].y = 0
             if self.ps.position[i].z > self.ps.domain_end[2]:
                 self.ps.position[i].z = self.ps.domain_end[2]
+                self.ps.velocity[i].z = 0
 
 
     @ti.kernel
@@ -201,8 +153,7 @@ class SnowSolver:
         '''
             Section 3.3.2
         '''
-        # to uncomment later :)
-        young_mod = 140
+        young_mod = 140_000
         xi = 10.0
         nu = 0.2
         numerator = young_mod * nu
@@ -211,7 +162,8 @@ class SnowSolver:
         p_0 = self.ps.init_density
         k = numerator / denom
         self.ps.lambda_t_i[i] = k * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
-        self.ps.lambda_t_i[i] = 100_000
+        if (i[0] == 0):
+            print("self.ps.lambda_t_i[i]", self.ps.lambda_t_i[i])
 
     @ti.func
     def compute_rest_density(self, i):

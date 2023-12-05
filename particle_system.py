@@ -18,7 +18,7 @@ class ParticleSystem:
         self.init_density = self.cfg.init_density
         self.gravity = ti.Vector(self.cfg.gravity)
         self.temperature = -10.0 # degrees Celsuis
-        self.m_k = 4/3 * (self.particle_radius ** self.dim) * np.pi * self.init_density # particle mass
+        self.m_k = np.pi * float(4/3) * self.particle_radius ** self.dim * self.init_density # particle mass
         # self.m_k = 0.008
         self.smoothing_radius = self.cfg.smoothing_radius_ratio * self.particle_radius
         # self.boundary_smoothing_radius = self.boundary_particle_radius * 4.0
