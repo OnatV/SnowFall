@@ -166,3 +166,4 @@ profiling/
 # IDE
 
 .vscode/
+*.npy
