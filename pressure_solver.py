@@ -25,24 +25,15 @@ class PressureSolver:
     def compute_A_p(self, i, deltaTime, density_error:ti.template()):
         deltaTime2 = deltaTime * deltaTime
         self.ps.pressure_laplacian[i] = 0.0
-        # grad_p = self.ps.pressure_gradient[i]
         lp_i = 0.0
         self.ps.for_all_neighbors(i, self.helper_diff_of_pressure_grad, lp_i)
         lp2 = 0.0
         self.ps.for_all_b_neighbors(i, self.helper_diff_of_pressure_grad_b, lp2)
         self.ps.pressure_laplacian[i] = lp_i + self.m_psi * lp2
-        # if (i[0] == 0):
-        #     print("lp", self.ps.pressure_laplacian[i])
         # now compute Ap
         A_p = -self.ps.rest_density[i] / ti.math.max(self.ps.lambda_t_i[i], self.numerical_eps) * self.ps.pressure[i] + deltaTime2 * lp_i
-        # if (i[0] == 0):
-        #     print("A_p",A_p)
         aii = self.ps.jacobian_diagonal[i]
         residuum = self.ps.rest_density[i] - self.ps.p_star[i] - A_p
-        # if (i[0] == 0):
-        #     print("p_star", self.ps.p_star[i])
-        #     print("aii", aii)
-        #     print("residuum", residuum)
         pi = (0.5 / (ti.math.sign(aii) * ti.math.max(ti.abs(aii), self.numerical_eps))) * residuum
         self.ps.pressure[i] += pi[0]
         density_error -= residuum
@@ -68,10 +59,6 @@ class PressureSolver:
         sum_of_b = ti.Vector([0.0, 0.0, 0.0])
         self.ps.for_all_b_neighbors(i, self.helper_Vb, sum_of_b)
         self.ps.pressure_gradient[i] = sum_of_pressures + 1.5 * self.ps.pressure[i] * sum_of_b
-        # if i[0] == 0:
-        #     print("snow contribution:", sum_of_pressures)
-        #     print("boundary contribtion:", self.ps.pressure[i] * sum_of_b)
-        #     print("pressure_gradient:", self.ps.pressure_gradient[i])
 
 
     @ti.func
@@ -90,15 +77,9 @@ class PressureSolver:
 
     @ti.func
     def helper_Vb(self, i, b, sum:ti.template()):
-        # if i[0] == 0:
-        #     print("dWib",cubic_kernel_derivative(self.ps.position[i] - self.ps.boundary_particles[b], self.ps.smoothing_radius))
         sum += self.ps.boundary_particles_volume[b] * cubic_kernel_derivative(
             self.ps.position[i] - self.ps.boundary_particles[b], self.ps.smoothing_radius
         )
-
-    # @ti.func
-    # def helper_sum_over_k(self, i, k, sum:ti.template()):
-    #     sum += self.get_volume(k) * cubic_kernel_derivative(self.ps.position[i] - self.ps.position[k])
         
     @ti.func
     def compute_jacobian_diagonal_entry(self, i, deltaTime):
@@ -119,10 +100,7 @@ class PressureSolver:
             Computes Step 1-4 in Algorithm 2 in the paper.
         '''
         #compute sph discretization using eq 6
-        # need to find predicted velocity but that can be done later
-        # print("Here")
         for i in ti.grouped(self.ps.position):
-            # print(i)
             self.ps.p_star[i] = 0
             self.ps.pressure[i] = 0
             self.ps.jacobian_diagonal[i] = 0
@@ -146,16 +124,16 @@ class PressureSolver:
             it = it + 1
             avg_density_error = self.implicit_pressure_solver_step(deltaTime)
             # if avg_density_error > 0.0:
-            print("-----ITERATION", it,"---------")
-            print("avg_density_error", avg_density_error)
-            print("pressure", self.ps.pressure[0])
-            print("rest density", self.ps.rest_density[0])
-            print("adv density", self.ps.p_star[0])
-            print("pressure_gradient", self.ps.pressure_gradient[0])
-            print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
-            print("less than min iters", it < min_iterations)
-            print("is solved", is_solved)
-            print("status", not is_solved or it < min_iterations)
+            # print("-----ITERATION", it,"---------")
+            # print("avg_density_error", avg_density_error)
+            # print("pressure", self.ps.pressure[0])
+            # print("rest density", self.ps.rest_density[0])
+            # print("adv density", self.ps.p_star[0])
+            # print("pressure_gradient", self.ps.pressure_gradient[0])
+            # print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
+            # print("less than min iters", it < min_iterations)
+            # print("is solved", is_solved)
+            # print("status", not is_solved or it < min_iterations)
             if np.isnan(avg_density_error):
                 is_solved = False
                 break

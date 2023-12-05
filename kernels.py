@@ -1,5 +1,6 @@
 import taichi as ti
 import numpy as np
+
 @ti.func
 def cubic_kernel(r_norm, h) -> ti.f32:
     # implementation details borrowed from SPH_Taichi

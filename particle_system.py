@@ -18,7 +18,7 @@ class ParticleSystem:
         self.init_density = self.cfg.init_density
         self.gravity = ti.Vector(self.cfg.gravity)
         self.temperature = -10.0 # degrees Celsuis
-        self.m_k = 4/3 * (self.particle_radius ** self.dim) * np.pi * self.init_density # particle mass
+        self.m_k = (self.particle_radius ** self.dim) * self.init_density # particle mass
         # self.m_k = 0.008
         self.smoothing_radius = self.cfg.smoothing_radius_ratio * self.particle_radius
         # self.boundary_smoothing_radius = self.boundary_particle_radius * 4.0
@@ -88,7 +88,7 @@ class ParticleSystem:
         # boundary particles
         self.bgrid_x = int((self.domain_size[0] / 2) / (self.boundary_particle_radius))
         self.bgrid_z = int((self.domain_size[2] / 2) / (self.boundary_particle_radius))
-        self.num_b_particles = 1875
+        self.num_b_particles = 625
         self.boundary_particles = ti.Vector.field(self.dim, dtype=float,  shape=self.num_b_particles)
         self.boundary_particles_volume = ti.field(float,  shape=self.num_b_particles)
         self.boundary_colors = ti.Vector.field(self.dim, dtype=float, shape=self.num_b_particles)
@@ -169,7 +169,7 @@ class ParticleSystem:
             self.boundary_colors[i] = ti.Vector([1.0, 1.0, 1.0])
 
         # self.boundary_initialize()
-        self.initialize_particle_block(0.5, 0.06, 0.5, ti.Vector([0.25, 0.25, 0.25]), self.boundary_particles)
+        self.initialize_particle_block(0.5, 0.02, 0.5, ti.Vector([0.25, 0.25, 0.25]), self.boundary_particles)
         self.b_grid.update_grid(self.boundary_particles)
         
         # boundary_plane_num_z_dir = self.bgrid_z

@@ -28,16 +28,62 @@ class SnowSolver:
         self.m_psi = 10
         # self.init_kernel_lookup()
         # TO DO: COMPUTE ADAPTIVE CORRECTION FACTORR
-        self.boundary_correction_factor = 10.0
+        self.gamma_1 = ti.field(float, shape=self.ps.num_particles)
+        self.gamma_2 = ti.field(float, shape=self.ps.num_particles)
 
-    # @ti.func
-    # def compute_bounary_correction_factor(self):
-    #     for i in ti.grouped(self.boundary_correction_factor):
-            
+    @ti.func
+    def helper_sum_kernel(self, i, j, sum:ti.template()):
+        sum += cubic_kernel(
+            (self.ps.position[i] - self.ps.position[j]).norm(), self.ps.smoothing_radius
+        )
+
+    @ti.func
+    def helper_sum_b_kernel(self, i, j, sum:ti.template()):
+        sum += cubic_kernel(
+            (self.ps.position[i] - self.ps.boundary_particles[j]).norm(), self.ps.smoothing_radius
+        )
+
+    @ti.func
+    def helper_sum_gradient(self, i, j, sum:ti.template()):
+        sum += cubic_kernel_derivative(
+            (self.ps.position[i] - self.ps.position[j]), self.ps.smoothing_radius
+        )
+
+    @ti.func
+    def helper_sum_b_gradient(self, i, j, sum:ti.template()):
+        sum += cubic_kernel_derivative(
+            (self.ps.position[i] - self.ps.boundary_particles[j]), self.ps.smoothing_radius
+        )
+
+    @ti.func
+    def compute_gamma_1(self, i):
+        invVi = 1.0 / self.get_volume(i)
+        kernel_sum = 0.0
+        self.ps.for_all_neighbors(i, self.helper_sum_kernel, kernel_sum)
+        boundary_kernel_sum = 0.0
+        self.ps.for_all_b_neighbors(i, self.helper_sum_b_kernel, boundary_kernel_sum)
+        self.gamma_1[i] = (invVi - kernel_sum) / boundary_kernel_sum
+
+    @ti.func
+    def compute_gamma_2(self, i):
+        kernel_sum = ti.Vector([0.0, 0.0, 0.0])
+        self.ps.for_all_neighbors(i, self.helper_sum_gradient, kernel_sum)
+        boundary_kernel_sum = ti.Vector([0.0, 0.0, 0.0])
+        self.ps.for_all_b_neighbors(i, self.helper_sum_b_gradient, boundary_kernel_sum)
+        self.gamma_2[i] = -(kernel_sum.dot(boundary_kernel_sum)) / boundary_kernel_sum.dot(boundary_kernel_sum)
+
+
+    @ti.kernel
+    def compute_bounary_correction_factor(self):
+        for i in ti.grouped(self.gamma_1):
+            self.compute_gamma_1(i)
+            self.compute_gamma_2(i)
+        print("gamma_1", self.gamma_1[0])
+        print("gamma_2", self.gamma_2[0])
 
     @ti.func
     def helper_boundary_volume(self, i, j, sum: ti.template()):
-        sum += cubic_kernel(self.ps.boundary_particles[i] - self.ps.boundary_particles[j], self.ps.smoothing_radius)
+        sum += cubic_kernel((self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm(), self.ps.smoothing_radius)
 
     @ti.func
     def compute_b_particle_volume(self, i):
@@ -54,8 +100,8 @@ class SnowSolver:
                 if i == j: continue
                 if (self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm() > self.ps.smoothing_radius: continue
                 kernel_sum += cubic_kernel((self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm(), self.ps.smoothing_radius)
-            # self.ps.boundary_particles_volume[i] = 0.8 * self.ps.boundary_particle_radius ** 3 * (1.0 / kernel_sum)
-            self.ps.boundary_particles_volume[i] = correction * (1.0 / kernel_sum) # which is it? Gissler et al v4 does not include h, but v1 does!!
+            self.ps.boundary_particles_volume[i] = 0.8 * self.ps.boundary_particle_radius ** 3 * (1.0 / kernel_sum)
+            # self.ps.boundary_particles_volume[i] = correction * (1.0 / kernel_sum) # which is it? Gissler et al v4 does not include h, but v1 does!!
             
 
     # def init_kernel_lookup(self, table_size = 100, grad_table_size = 100):
@@ -158,17 +204,17 @@ class SnowSolver:
             Section 3.3.2
         '''
         # to uncomment later :)
-        # young_mod = 140000
-        # xi = 10
-        # nu = 0.2
-        # numerator = young_mod * nu
-        # denom = (1 + nu) * (1 - 2.0*nu)
-        # p0_t = self.ps.rest_density[i]
-        # # what should p_0 be?
-        # p_0 = self.ps.init_density
-        # k = numerator / denom
-        # self.ps.lambda_t_i[i] = k * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
-        self.ps.lambda_t_i[i] = 100_000
+        young_mod = 140_000
+        xi = 10
+        nu = 0.2
+        numerator = young_mod * nu
+        denom = (1 + nu) * (1 - 2.0*nu)
+        p0_t = self.ps.rest_density[i]
+        # what should p_0 be?
+        p_0 = self.ps.init_density
+        k = numerator / denom
+        self.ps.lambda_t_i[i] = k * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
+        # self.ps.lambda_t_i[i] = 100_000
 
     @ti.func
     def compute_rest_density(self, i):
@@ -185,8 +231,8 @@ class SnowSolver:
         self.ps.density[i] = density_i
         self.ps.rest_density[i] = self.ps.density[i] * detF
         # rest density does not need boundary neighbors
-        self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
-        self.ps.density[i] = density_i
+        # self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
+        # self.ps.density[i] = density_i
         if i[0] == 0:
             print("density", density_i)
 
@@ -200,13 +246,14 @@ class SnowSolver:
     def calc_density_b(self, i_idx, j_idx, d:ti.template()):
         rnorm = ti.Vector.norm(self.ps.position[i_idx] - self.ps.boundary_particles[j_idx])
         # d +=  cubic_kernel(rnorm) * ti.cast(self.ps.m_k, ti.f32)
-        # d += self.boundary_correction_factor * cubic_kernel(rnorm, self.ps.smoothing_radius) * self.ps.m_k
-        d += cubic_kernel(rnorm, self.ps.smoothing_radius) * self.ps.rest_density[i_idx] * self.ps.boundary_particles_volume[j_idx]
-        
+        # d += self.gamma_1[i_idx] * cubic_kernel(rnorm, self.ps.smoothing_radius) * self.ps.m_k
+        d += cubic_kernel(rnorm, self.ps.smoothing_radius) * self.ps.boundary_particles_volume[j_idx] * self.ps.rest_density[i_idx]
+
     #calculate V_i = m_i / density_i
     @ti.func
     def get_volume(self, i):
-        return (self.ps.m_k / ti.math.max(self.ps.rest_density[i], self.numerical_eps ) )
+        return (self.ps.m_k / ti.math.max(self.ps.density[i], self.numerical_eps ) )
+        # return self.ps.particle_radius ** 3
 
     @ti.func
     def helper_a_lambda_fluid_neighbors(self, i, j, sum:ti.template()):
@@ -229,7 +276,7 @@ class SnowSolver:
         a = self.ps.rest_density[i] * self.ps.boundary_particles_volume[j] * dpi * cubic_kernel_derivative(
             self.ps.position[i] - self.ps.boundary_particles[j], self.ps.smoothing_radius
         )
-        sum -= self.boundary_correction_factor * a
+        sum -= a
     
     @ti.kernel
     def compute_a_lambda(self, success : ti.template()):
@@ -244,7 +291,7 @@ class SnowSolver:
                 self.ps.for_all_neighbors(i, self.helper_a_lambda_fluid_neighbors, a_lambda)
                 self.ps.for_all_b_neighbors(i, self.helper_a_lambda_b, a_lambda)
                 
-                # a_lambda = -1.0 / self.ps.density[i] * self.ps.pressure_gradient[i]
+                # a_lambda = 1.0 / self.ps.density[i] * self.ps.pressure_gradient[i]
             self.ps.acceleration[i] += a_lambda
             if i[0] == 0:
                 print("a_lambda", a_lambda)
@@ -472,6 +519,7 @@ class SnowSolver:
         
         if time == 0.0:
             self.compute_boundary_volumes()
+        self.compute_bounary_correction_factor()
         # self.ps.cumsum.run(self.ps.grid_particles_num)
         # self.ps.cumsum_indx()
         # self.ps.sort_particles()
