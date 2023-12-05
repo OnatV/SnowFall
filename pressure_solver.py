@@ -123,17 +123,14 @@ class PressureSolver:
         while ( (not is_solved or it < min_iterations) and it < max_iterations):
             it = it + 1
             avg_density_error = self.implicit_pressure_solver_step(deltaTime)
-            # if avg_density_error > 0.0:
-            # print("-----ITERATION", it,"---------")
-            # print("avg_density_error", avg_density_error)
-            # print("pressure", self.ps.pressure[0])
-            # print("rest density", self.ps.rest_density[0])
-            # print("adv density", self.ps.p_star[0])
-            # print("pressure_gradient", self.ps.pressure_gradient[0])
-            # print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
-            # print("less than min iters", it < min_iterations)
-            # print("is solved", is_solved)
-            # print("status", not is_solved or it < min_iterations)
+            print("-----ITERATION", it,"---------")
+            print("avg_density_error", avg_density_error)
+            print("pressure", self.ps.pressure[0])
+            print("rest density", self.ps.rest_density[0])
+            print("density", self.ps.rest_density[0])
+            print("adv density", self.ps.p_star[0])
+            print("pressure_gradient", self.ps.pressure_gradient[0])
+            print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
             if np.isnan(avg_density_error):
                 is_solved = False
                 break
