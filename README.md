@@ -66,22 +66,24 @@ This pseudocode is already layed out in [SnowSolver.substep](sph_solver.py)
 ## To-Do/Next Steps:
 - ~~implement smoothing kernel for SPH~~
 - implement minimal target
-    - compute rest density - Livio
-    - compute correction matrix - Livio
-    - compute a_other (ignoring boundary effects) - Livio
+    - ~~compute rest density - Livio~~
+    - ~~compute correction matrix - Livio~~
+    - ~~compute a_other (ignoring boundary effects) - Livio~~
     - solver for elastic deformation - Jackson
-        - solve a^lambda
-        - solve a_G
+        - solve a^lambda : almost done
+        - solve a_G: future work
     - ~~integrate deformation gradient - Onat~~
-    - Grid for performance - Onat -> Partly done ???
-    - fixing the camera lookat - Jackson
+    - ~~Grid for performance - Onat -> Partly done ???~~
+    - ~~fixing the camera lookat - Jackson~~
 - implement desired target
-    - compute full a_other term
+    - ~~compute full a_other term~~
     - compute a_friction
 - Nice to have:
     - saving to output
     - Config parser
-    - Skybox/shading
+    - Skybox/shading : Jackson
+- Logger
+- 
 
 ## Sources
 for theory:

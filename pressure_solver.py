@@ -50,6 +50,10 @@ class PressureSolver:
             self.ps.position[i] - self.ps.boundary_particles[b], self.ps.smoothing_radius)
         ))
 
+    @ti.kernel
+    def update_pressure_gradient(self):
+        for i in ti.grouped(self.ps.position):
+            self.compute_pressure_gradient(i)
 
     @ti.func
     def compute_pressure_gradient(self, i):
@@ -58,7 +62,7 @@ class PressureSolver:
         self.ps.for_all_neighbors(i, self.helper_sum_of_pressure, sum_of_pressures)
         sum_of_b = ti.Vector([0.0, 0.0, 0.0])
         self.ps.for_all_b_neighbors(i, self.helper_Vb, sum_of_b)
-        self.ps.pressure_gradient[i] = sum_of_pressures + 1.5 * self.ps.pressure[i] * sum_of_b
+        self.ps.pressure_gradient[i] = sum_of_pressures + 3.0 * self.ps.pressure[i] * sum_of_b
 
 
     @ti.func
@@ -123,17 +127,14 @@ class PressureSolver:
         while ( (not is_solved or it < min_iterations) and it < max_iterations):
             it = it + 1
             avg_density_error = self.implicit_pressure_solver_step(deltaTime)
-            # if avg_density_error > 0.0:
-            # print("-----ITERATION", it,"---------")
-            # print("avg_density_error", avg_density_error)
-            # print("pressure", self.ps.pressure[0])
-            # print("rest density", self.ps.rest_density[0])
-            # print("adv density", self.ps.p_star[0])
-            # print("pressure_gradient", self.ps.pressure_gradient[0])
-            # print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
-            # print("less than min iters", it < min_iterations)
-            # print("is solved", is_solved)
-            # print("status", not is_solved or it < min_iterations)
+            print("-----ITERATION", it,"---------")
+            print("avg_density_error", avg_density_error)
+            print("pressure", self.ps.pressure[0])
+            print("rest density", self.ps.rest_density[0])
+            print("density", self.ps.rest_density[0])
+            print("adv density", self.ps.p_star[0])
+            print("pressure_gradient", self.ps.pressure_gradient[0])
+            print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
             if np.isnan(avg_density_error):
                 is_solved = False
                 break
@@ -141,6 +142,7 @@ class PressureSolver:
                 is_solved = True
             else:
                 is_solved = False
+        self.update_pressure_gradient()
         return is_solved       
 
     @ti.kernel
