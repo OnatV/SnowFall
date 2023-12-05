@@ -50,6 +50,10 @@ class PressureSolver:
             self.ps.position[i] - self.ps.boundary_particles[b], self.ps.smoothing_radius)
         ))
 
+    @ti.kernel
+    def update_pressure_gradient(self):
+        for i in ti.grouped(self.ps.position):
+            self.compute_pressure_gradient(i)
 
     @ti.func
     def compute_pressure_gradient(self, i):
@@ -58,7 +62,7 @@ class PressureSolver:
         self.ps.for_all_neighbors(i, self.helper_sum_of_pressure, sum_of_pressures)
         sum_of_b = ti.Vector([0.0, 0.0, 0.0])
         self.ps.for_all_b_neighbors(i, self.helper_Vb, sum_of_b)
-        self.ps.pressure_gradient[i] = sum_of_pressures + 1.5 * self.ps.pressure[i] * sum_of_b
+        self.ps.pressure_gradient[i] = sum_of_pressures + 3.0 * self.ps.pressure[i] * sum_of_b
 
 
     @ti.func
@@ -138,6 +142,7 @@ class PressureSolver:
                 is_solved = True
             else:
                 is_solved = False
+        self.update_pressure_gradient()
         return is_solved       
 
     @ti.kernel
