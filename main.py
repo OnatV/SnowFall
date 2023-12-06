@@ -14,6 +14,7 @@ if __name__ =='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--config', action='store', required=True)
+    parser.add_argument('--replay', action='store_true')
     args = parser.parse_args()
     ti.init(arch=ti.cpu, debug=args.debug)
     # print_about()
@@ -30,7 +31,7 @@ if __name__ =='__main__':
     logger = None
     if cfg.logging:
         logger = Logger(ps, cfg)
-    while ps.window.running:
+    while ps.window.running and time < cfg.max_time:
         # press SPACE to start the simulation
         if ps.window.is_pressed(ti.ui.SPACE, ' '): sim_is_running = True
         if ps.window.is_pressed(ti.ui.ALT): sim_is_running = False
