@@ -7,7 +7,13 @@
 ## dependencies
 - taichi
 - numpy
-- 
+- h5py
+- configparser
+
+### Why hdf5 format for logging?
+`hdf5` is a dataset format that works well for large datasets. If at some point we want to save long simulations with lots of particles, this file format is extremely useful.
+
+For example, suppose we are saving a simulation that contains 1.5 million fluid particles and lasts for 60 seconds. We save at 24 FPS. For each particle, we are saving `position`, `velocity`, `acceleration`, `density`, and `pressure`. That means we are logging 11 floats per particle per timestep. In total, that's an estimated 95.4 gigabytes of data! But with HDF5, we can dynamically load only specified parts of the file from disk. For example, we can choose to load from disk only the first 1000 timesteps of the position field, which is only 360 megabytes. Obviously this is an extreme example, but it illustrates the point.
 
 ## Current Progress
 
@@ -70,7 +76,8 @@ This pseudocode is already layed out in [SnowSolver.substep](sph_solver.py)
     - ~~compute correction matrix - Livio~~
     - ~~compute a_other (ignoring boundary effects) - Livio~~
     - solver for elastic deformation - Jackson
-        - solve a^lambda : almost done
+        - ~~solve a^lambda : almost done~~
+    - solver for plastic deformation
         - solve a_G: future work
     - ~~integrate deformation gradient - Onat~~
     - ~~Grid for performance - Onat -> Partly done ???~~
@@ -79,10 +86,10 @@ This pseudocode is already layed out in [SnowSolver.substep](sph_solver.py)
     - ~~compute full a_other term~~
     - compute a_friction
 - Nice to have:
-    - saving to output
+    - ~~saving to output~~
     - Config parser
     - Skybox/shading : Jackson
-- Logger
+- ~~Logger~~
 - 
 
 ## Sources
