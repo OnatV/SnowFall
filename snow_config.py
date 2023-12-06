@@ -45,7 +45,7 @@ class SnowConfig:
         self.grid_max_particles_per_cell = int(config['SIMULATION']['max_particles_per_cell']) ##Needed because taichi doesn't support dynamic arrays well, can be decreased if grid spacing is decreased        
         # # values from paper
         self.initialize_type = config['SIMULATION']['initialize_type']
-
+        self.max_time = float(config['SIMULATION']['max_time'])
         if 'BLOCK' in config.keys():
             self.block_origin = list2vec(config['BLOCK']['position'])
             self.block_length = float(config['BLOCK']['length'])
@@ -57,6 +57,7 @@ class SnowConfig:
             self.logging = True
             self.log_dir = config['LOGGING']['log_dir']
             self.logging_fields = config['LOGGING']['fields']
+            self.log_fps = float(config['LOGGING']['fps'])
 
         print(self.initialize_type)
 def list2vec(strlist: str):

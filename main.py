@@ -26,6 +26,7 @@ if __name__ =='__main__':
     # print(ps.fluid_grid.to_grid_idx(ti.Vector([0.1, 0.2, 0.1])))
     sim_is_running = False
     time = 0.0
+    last_log_time = 0.0
     logger = None
     if cfg.logging:
         logger = Logger(ps, cfg)
@@ -34,8 +35,12 @@ if __name__ =='__main__':
         if ps.window.is_pressed(ti.ui.SPACE, ' '): sim_is_running = True
         if ps.window.is_pressed(ti.ui.ALT): sim_is_running = False
         if sim_is_running:
+            print("Time:", time)
             snow_solver.step(cfg.deltaTime, time)
             # sim_is_running = False # press space for one step at a time
+            if time - last_log_time > logger.log_time_step or time == 0.0:
+                logger.log_step(time)
+                last_log_time = time
             time += cfg.deltaTime
-
+            
         ps.visualize()
