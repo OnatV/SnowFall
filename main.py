@@ -31,9 +31,8 @@ if __name__ =='__main__':
     sim_is_running = False
     sim_time = 0.0
     last_log_time = 0.0
-    logger = None
-    if cfg.logging:
-        logger = Logger(ps, cfg, args.replay)
+    
+    logger = Logger(ps, cfg, args.replay)
     if not args.replay:
         print("Creating a new simulation!")
         while ps.window.running and sim_time < cfg.max_time:

@@ -53,8 +53,8 @@ class SnowConfig:
             self.block_height = float(config['BLOCK']['height'])
             self.num_particles = int((self.block_length / self.particle_radius) * (self.block_width / self.particle_radius) * (self.block_height / self.particle_radius))
 
-        if 'LOGGING' in config.keys() # consider changing for upper/lowercase matches
-            self.logging = True
+        if 'LOGGING' in config.keys(): # consider changing for upper/lowercase matches
+            self.logging = config['LOGGING']['logging'] == 'true'
             self.log_dir = config['LOGGING']['log_dir']
             self.logging_fields = config['LOGGING']['fields']
             self.log_fps = float(config['LOGGING']['fps'])
