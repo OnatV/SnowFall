@@ -26,6 +26,8 @@ class SnowSolver:
         self.wind_enabled = ps.enable_wind
         self.numerical_eps = 1e-6
         self.m_psi = 10
+        self.friction_coef = 0.2
+
         # self.init_kernel_lookup()
         # TO DO: COMPUTE ADAPTIVE CORRECTION FACTORR
         self.gamma_1 = ti.field(float, shape=self.ps.num_particles)
@@ -87,7 +89,7 @@ class SnowSolver:
     def compute_b_particle_volume(self, i):
         kernel_sum = 0.0
         self.ps.for_all_neighbors_b_grid(i, self.helper_boundary_volume, kernel_sum)
-        self.ps.boundary_particles_volume[i] = (1.0 / kernel_sum) # which is it? Gissler et al v4 does not include h, but v1 does!!
+        self.ps.boundary_particles_volume[i] = (1.0 / kernel_sum) 
 
     @ti.kernel
     def compute_boundary_volumes(self):
@@ -99,7 +101,7 @@ class SnowSolver:
                 if (self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm() > self.ps.smoothing_radius: continue
                 kernel_sum += cubic_kernel((self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm(), self.ps.smoothing_radius)
             # self.ps.boundary_particles_volume[i] = 0.8 * self.ps.boundary_particle_radius ** 3 * (1.0 / kernel_sum)
-            self.ps.boundary_particles_volume[i] = correction * (1.0 / kernel_sum) # which is it? Gissler et al v4 does not include h, but v1 does!!
+            self.ps.boundary_particles_volume[i] = correction * (1.0 / kernel_sum)
             
 
     @ti.kernel
@@ -178,7 +180,11 @@ class SnowSolver:
         density_i = 0.0
         self.ps.for_all_neighbors(i, self.calc_density, density_i)
         self.ps.density[i] = density_i
+
+        # Eq 21 from the paper, we use only the fluid particles to compute rest denstiy
         self.ps.rest_density[i] = self.ps.density[i] * detF
+
+
         self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
         self.ps.density[i] = density_i
         if i[0] == 0:
@@ -186,11 +192,17 @@ class SnowSolver:
 
     @ti.func
     def calc_density(self, i_idx, j_idx, d:ti.template()):
+        '''
+            Step 2 : Eq 20 from the paper, part1
+        '''
         rnorm = ti.Vector.norm(self.ps.position[i_idx] - self.ps.position[j_idx])
         d += cubic_kernel(rnorm, self.ps.smoothing_radius) * self.ps.m_k
 
     @ti.func
     def calc_density_b(self, i_idx, j_idx, d:ti.template()):
+        '''
+            Step 2 : Eq 20 from the paper, part2
+        '''
         rnorm = ti.Vector.norm(self.ps.position[i_idx] - self.ps.boundary_particles[j_idx])
         d += cubic_kernel(rnorm, self.ps.smoothing_radius) * self.ps.boundary_particles_volume[j_idx] * self.ps.rest_density[i_idx]
 
@@ -220,7 +232,7 @@ class SnowSolver:
         a = self.ps.rest_density[i] * self.ps.boundary_particles_volume[j] * dpi * cubic_kernel_derivative(
             self.ps.position[i] - self.ps.boundary_particles[j], self.ps.smoothing_radius
         )
-        sum -= 100.0 * a
+        sum -= a
     
     @ti.kernel
     def compute_a_lambda(self, success : ti.template()):
@@ -319,16 +331,64 @@ class SnowSolver:
         if ti.static(self.wind_enabled):
             wind_acc += self.ps.wind_direction * self.ps.position[i].dot(self.ps.wind_direction)
 
-        # remove gravity for now
-        self.ps.acceleration[i] = self.ps.gravity 
+        self.ps.acceleration[i] = self.ps.gravity + wind_acc
 
     @ti.func
     def compute_flow(self, i):
         pass
+    
+    @ti.func
+    def helper_compute_accel_friction(self, i_idx, b_idx, sum:ti.template()):
+        '''
+            Helper of self.compute_accel_friction, computes the sum term in Eq 24 from the paper. 
+        '''
+        x_ib = self.ps.position[i_idx] - self.ps.boundary_particles[b_idx]
+        grad_kernel_ib = cubic_kernel_derivative(
+            self.ps.position[i_idx] - self.ps.boundary_particles[b_idx], self.ps.smoothing_radius
+        )
+        h = 2 * self.ps.boundary_particle_radius
+        sum += self.ps.boundary_particles_volume[b_idx] * x_ib.dot(grad_kernel_ib) * self.ps.boundary_velocity[b_idx] / (x_ib.norm_sqr() + 0.01 * h * h)
 
     @ti.func
-    def compute_accel_friction(self, i):
-        pass
+    def compute_accel_friction(self, i, deltaTime:float):
+        '''
+            Computes Step 5 in Algorithm 1 in the paper.
+        '''
+        self.compute_friction_diagonal(i, deltaTime)
+        sum_term = ti.Vector([0.0, 0.0, 0.0], dt = float)
+        self.ps.for_all_b_neighbors(i, self.helper_compute_accel_friction, sum_term)
+
+        denom = self.ps.friction_diagonal[i][0] * deltaTime
+        nom = self.ps.velocity[i] + deltaTime * self.ps.acceleration[i] - deltaTime * self.friction_coef * sum_term 
+        self.ps.acceleration[i] += nom / denom
+
+    @ti.func
+    def compute_friction_diagonal(self,i, deltaTime:float):
+        '''
+            Helper of self.compute_accel_friction.
+            Eq 25 from the paper
+        '''
+        sum_term = 0.0
+        self.ps.for_all_b_neighbors(i, self.helper_compute_friction_diagonal, sum_term)
+        self.ps.friction_diagonal[i] = 1 - deltaTime * self.friction_coef * sum_term
+
+    @ti.func
+    def helper_compute_friction_diagonal(self, i_idx, b_idx, sum:ti.template()):
+        '''
+            Helper of self.compute_accel_friction.
+            Eq 25 from the paper
+        '''
+        
+        x_ib = self.ps.position[i_idx] - self.ps.boundary_particles[b_idx]
+        grad_kernel_ib = cubic_kernel_derivative(
+            self.ps.position[i_idx] - self.ps.boundary_particles[b_idx], self.ps.smoothing_radius
+        )
+        h = 2 * self.ps.boundary_particle_radius
+
+        denom = (x_ib.norm_sqr() + 0.01 * h * h)
+        sum += self.ps.boundary_particles_volume[b_idx] * x_ib.dot(grad_kernel_ib) / denom
+
+
 
     @ti.kernel
     def compute_external_forces_only(self, deltaTime:float):
@@ -336,7 +396,7 @@ class SnowSolver:
             self.compute_accel_ext(i)
 
     @ti.kernel
-    def compute_internal_forces(self):
+    def compute_internal_forces(self, deltaTime:float ):
         '''
             Computes for loop 1 in Algorithm 1 in the paper.
                 Steps:
@@ -351,7 +411,7 @@ class SnowSolver:
             self.compute_lame_parameters(i) ##Don't get what this is doing
             self.compute_correction_matrix(i) #Step 3
             self.compute_accel_ext(i) #Step 4
-            self.compute_accel_friction(i) #Step 5
+            self.compute_accel_friction(i, deltaTime) #Step 5
             rest_density_sum += self.ps.rest_density[i]
         self.ps.avg_rest_density[0] = rest_density_sum / self.ps.num_particles
 
@@ -445,9 +505,9 @@ class SnowSolver:
         # self.ps.gravity = set to zero
         if ti.static(self.snow_implemented):
             # these functions should update the acceleration field of the particles
-            self.compute_internal_forces() # Step 1, includes Steps 2-5
+            self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-5
             # print("before solve a")
-            self.solve_a_lambda(deltaTime) # Step 6
+            # self.solve_a_lambda(deltaTime) # Step 6
             # self.solve_a_G()             #Step 7 
             self.integrate_velocity(deltaTime) # Step 8-9
             self.integrate_deformation_gradient(deltaTime) #Step 10-11

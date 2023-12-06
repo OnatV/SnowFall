@@ -62,7 +62,7 @@ class PressureSolver:
         self.ps.for_all_neighbors(i, self.helper_sum_of_pressure, sum_of_pressures)
         sum_of_b = ti.Vector([0.0, 0.0, 0.0])
         self.ps.for_all_b_neighbors(i, self.helper_Vb, sum_of_b)
-        self.ps.pressure_gradient[i] = sum_of_pressures + 3.0 * self.ps.pressure[i] * sum_of_b
+        self.ps.pressure_gradient[i] = sum_of_pressures + 1.5 * self.ps.pressure[i] * sum_of_b
 
 
     @ti.func
