@@ -1,0 +1,4 @@
+numpy
+taichi
+configparser
+h5py

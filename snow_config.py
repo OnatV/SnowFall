@@ -53,6 +53,11 @@ class SnowConfig:
             self.block_height = float(config['BLOCK']['height'])
             self.num_particles = int((self.block_length / self.particle_radius) * (self.block_width / self.particle_radius) * (self.block_height / self.particle_radius))
 
+        if 'LOGGING' in config.keys() and config['LOGGING']['logging'] == 'true': # consider changing for upper/lowercase matches
+            self.logging = True
+            self.log_dir = config['LOGGING']['log_dir']
+            self.logging_fields = config['LOGGING']['fields']
+
         print(self.initialize_type)
 def list2vec(strlist: str):
     return np.array(json.loads(strlist))

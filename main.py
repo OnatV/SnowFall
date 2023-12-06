@@ -4,6 +4,7 @@ import taichi as ti
 from utils import *
 from particle_system import ParticleSystem
 from sph_solver import SnowSolver
+from logger import Logger
 
 import argparse
 
@@ -25,6 +26,9 @@ if __name__ =='__main__':
     # print(ps.fluid_grid.to_grid_idx(ti.Vector([0.1, 0.2, 0.1])))
     sim_is_running = False
     time = 0.0
+    logger = None
+    if cfg.logging:
+        logger = Logger(ps, cfg)
     while ps.window.running:
         # press SPACE to start the simulation
         if ps.window.is_pressed(ti.ui.SPACE, ' '): sim_is_running = True
@@ -33,4 +37,5 @@ if __name__ =='__main__':
             snow_solver.step(cfg.deltaTime, time)
             # sim_is_running = False # press space for one step at a time
             time += cfg.deltaTime
+
         ps.visualize()
