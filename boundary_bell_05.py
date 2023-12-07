@@ -26,16 +26,19 @@ with open(precomp_path, "rb") as rf:
     voxels = np.load(rf)
     gradients = np.load(rf)
 
+transl = np.array([3, 3, 3])
+
 if type(mesh) is trimesh.Scene: 
     mesh = mesh.dump()[0]
 mesh.apply_translation(- mesh.bounding_box.centroid)
+mesh.apply_translation(transl)
 verts = mesh.vertices 
 faces = mesh.faces
 
 voxel_scale =  np.max(mesh.bounding_box.extents) / 2
-x = np.linspace(-1.0, 1.0, 48) * voxel_scale
-y = np.linspace(-1.0, 1.0, 48) * voxel_scale
-z = np.linspace(-1.0, 1.0, 48) * voxel_scale
+x = np.linspace(-1.0, 1.0, 48) * voxel_scale + transl[0]
+y = np.linspace(-1.0, 1.0, 48) * voxel_scale + transl[1]
+z = np.linspace(-1.0, 1.0, 48) * voxel_scale + transl[2]
 inter_voxels = RegularGridInterpolator((x, y, z), voxels, bounds_error=False, fill_value=None )
 inter_grad   = RegularGridInterpolator((x, y, z), gradients, bounds_error=False, fill_value=None )
 
@@ -66,10 +69,10 @@ def cubic_kernel(r_norm, h):
 class Data:
     def __init__(self, mesh_vertices, mesh_faces) -> None:
         numFaces = mesh_faces.shape[0]
-        self.time_step = 0.015
-        self.h = particle_radius * 1.5
-        self.origin = ti.Vector([-3.0]*3)
-        self.grid_end = ti.Vector([3.0]*3)
+        self.time_step = 0.1
+        self.h = particle_radius * 2.1
+        self.origin = ti.Vector([0.0]*3)
+        self.grid_end = ti.Vector([6.0]*3)
         self.grid_spacing = self.h * 1.2
         self.fg = FluidGrid(self.origin, self.grid_end, self.grid_spacing)
         print("grid size:", self.fg.num_cells)
@@ -88,7 +91,7 @@ class Data:
             e2 = x2 - x0
 
             # calculate D*A / (pi*r^2)
-            sample_density = 2
+            sample_density = 1.5
             area = norm(np.cross(e1, e2)) / 2.0
             numParticles = int(sample_density * area / (np.pi * particle_radius**2))
             numParticles = min(numParticles, max_particles_per_face)
@@ -123,7 +126,7 @@ class Data:
         for pos_ in tmp_pos:
             for i in range(pos_.shape[0]):
                 self.pos[offset + i] = pos_[i]
-                self.colors[offset + i] = colors[col_idx // 2]
+                self.colors[offset + i] = colors[4]
             offset += pos_.shape[0]
             col_idx+=1
         self.fg.update_grid(self.pos)
@@ -137,26 +140,67 @@ class Data:
     @ti.func
     def aux_update_velocities(self, i, j, vr:ti.template()):        
         if i[0] != j:
-            #if i[0] % 300 == 0:
-            #    print(vr, end="")
             r = (self.pos[i] - self.pos[j])
             vr += cubic_kernel(r.norm(), self.h) * r.normalized()
+            #if i[0] % 300 == 0:
+            #    print(vr, end="")
 
     @ti.kernel
     def update_vr(self): # V_r part
         for i in ti.grouped(self.vel):
             self.vel[i] = [0,0,0]
         for i in ti.grouped(self.vel):
-            
             self.fg.for_all_neighbors(i, self.pos, self.aux_update_velocities, self.vel[i], self.h)
+            vel_norm = self.vel[i].normalized(0.0001)
+            if i[0] % 300 == 0:
+                print(i, self.vel[i], vel_norm)
+            self.vel[i] = vel_norm * self.h
             #if vr.norm() > self.h * 2:
             #    vr = vr / vr.norm() * self.h * 2
-            if i[0] % 300 == 0:
-                print(i, self.vel[i])
             
+    @ti.func
+    def max_velocity(self) -> float:
+        ret = ti.Vector([-1.0], float)
+        for i in range(self.vel.shape[0]):
+            ti.atomic_max(ret, self.vel[i].norm())
+        return ret[0]
+
+    @ti.kernel
+    def scale_velocity(self):
+        """scale velocities be no more than 1 in norm"""
+        maxvel = self.max_velocity()
+        for i in range(self.vel.shape[0]):
+            self.vel[i] /= maxvel
+    @ti.func
+    def colorize(self, i, j, ret:ti.template()):
+        if i == j:
+            self.colors[j] = [0.0, 0.0, 1.0]
+        else:
+            self.colors[j] = [1.0, 0.0, 0.0]
+
+    @ti.kernel
+    def neigh_color(self, i:int):
+        self.fg.for_all_neighbors(i, self.pos, self.colorize, [], self.h)
+
+    @ti.kernel
+    def color_density(self):
+        red = [1, 0, 0]
+        white = [1, 1, 1]
+        max_density = 500
+        for i in range(self.colors.shape[0]):
+            density = ti.Vector([0], float)
+            self.fg.for_all_neighbors(i, self.pos, self.calc_density, density, self.h)
+            density_ratio = ti.math.clamp(density, 0, max_density) / max_density
+            self.colors[i] = red * density_ratio[0] + (1 - density_ratio[0]) * white
+
+    @ti.func
+    def calc_density(self, i, j, ret:ti.template()):
+        rnorm = (self.pos[i] - self.pos[j]).norm()
+        ret += 0.01 * cubic_kernel(rnorm, self.h)
 
     def update_velocity(self):
         self.update_vr()
+        #self.scale_velocity()
         for i in range(self.pos.shape[0]):
             x_np = self.pos[i].to_numpy()
 
@@ -167,7 +211,8 @@ class Data:
             #self.vel[i] -= n*tmp
 
             v_f = -phi * n
-            self.vel[i] = v_f * 1.0
+            self.vel[i] += v_f * 7.0
+
 
 data = Data(verts, faces)
 
@@ -177,11 +222,11 @@ vertices.from_numpy(verts)
 indices = ti.field(int, shape=faces.shape[0] * 3)
 indices.from_numpy(faces.flatten())
 
-window = ti.ui.Window("display", res=(1600,1600), vsync=True)
+window = ti.ui.Window("display", res=(800,800), vsync=True)
 camera = ti.ui.Camera()
 camera.up(0.0, 1.0, 0.0)
-camera.position(-3.0, 0.5, 0.5)
-camera.lookat(0,0.5,0)
+camera.position(0, 0.5+3, 0.5+3)
+camera.lookat(0 + 3,0.5 + 3,0 + 3)
 canvas = window.get_canvas()
 scene = ti.ui.Scene()
 
@@ -191,18 +236,30 @@ iteration = 0
 while window.running:
     if window.is_pressed(ti.ui.SPACE, ' '): particle_sim = True
     if window.is_pressed(ti.ui.ALT): particle_sim = False
+    # if window.is_pressed(ti.ui.UP):
+    #     data.pos[0].x += 0.05
+    # if window.is_pressed(ti.ui.DOWN):
+    #     data.pos[0].x -= 0.05
+    # if window.is_pressed(ti.ui.LEFT):
+    #     data.pos[0].z += 0.05
+    # if window.is_pressed(ti.ui.RIGHT):
+    #     data.pos[0].z -= 0.05
     camera.track_user_inputs(window, movement_speed=0.03, hold_key=ti.ui.RMB)
     scene.set_camera(camera)
     scene.ambient_light((0.8, 0.8, 0.8))
     scene.mesh(vertices=vertices, indices=indices ,color=(1.0,0.0,0.0), show_wireframe=True)
+    #data.color_reset()
+    #data.neigh_color(0)
     if particle_sim:    
         data.update_velocity()
         data.update_positions()
         data.fg.update_grid(data.pos)
+        data.color_density()
+
         
     scene.particles(data.pos, radius=particle_radius*1.0, per_vertex_color=data.colors)
     canvas.scene(scene)
 
     window.show()
-    data.time_step = 0.08 / 1
-    iteration += 1
+    data.time_step = 0.18 / (iteration + 1) ** 0.2
+    iteration = min(iteration+1, 100)
