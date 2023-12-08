@@ -35,6 +35,9 @@ class SnowConfig:
         self.theta_c = float(config['PHYSICS']['theta_c'])
         self.theta_s = float(config['PHYSICS']['theta_s'])
         self.init_density = float(config['PHYSICS']['init_density'])
+        self.young_mod = float(config['PHYSICS']['young_mod'])
+        self.xi = float(config['PHYSICS']['xi'])
+        self.nu = float(config['PHYSICS']['nu'])
 
         self.friction = float(config['PHYSICS']['friction'])
         self.m_psi = float(config['PHYSICS']['m_psi'])
