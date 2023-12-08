@@ -38,6 +38,8 @@ class Logger:
                     self.file.create_dataset(field, (3 * self.cfg.num_particles, self.num_time_steps), dtype='f')
                 if field == 'density':
                     self.file.create_dataset(field, (1 * self.cfg.num_particles, self.num_time_steps), dtype='f')
+                if field == 'rest_density':
+                    self.file.create_dataset(field, (1 * self.cfg.num_particles, self.num_time_steps), dtype='f')
                 if field == 'pressure':
                     self.file.create_dataset(field, (1 * self.cfg.num_particles, self.num_time_steps), dtype='f')
         else:
@@ -53,8 +55,21 @@ class Logger:
         for field in self.fields:
             if field == 'position':
                 dset = self.file['position']
-                position_data = self.ps.position.to_numpy().reshape([3 * self.ps.num_particles])
-                dset[:, self.current_step] = position_data
+                data = self.ps.position.to_numpy().reshape([3 * self.ps.num_particles])
+                dset[:, self.current_step] = data
+            if field == 'acceleration':
+                dset = self.file['acceleration']
+                data = self.ps.position.to_numpy().reshape([3 * self.ps.num_particles])
+                dset[:, self.current_step] = data
+            if field == 'density':
+                dset = self.file['density']
+                data = self.ps.position.to_numpy().reshape([self.ps.num_particles])
+                dset[:, self.current_step] = data
+            if field == 'rest_density':
+                dset = self.file['rest_density']
+                data = self.ps.position.to_numpy().reshape([self.ps.num_particles])
+                dset[:, self.current_step] = data
+
             ## add more fields here similar to above!
         self.current_step += 1
 
