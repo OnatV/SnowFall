@@ -156,7 +156,7 @@ class SnowSolver:
         '''
             Section 3.3.2
         '''
-        young_mod = 1_000_000
+        young_mod = 140_000
         xi = 10.0
         nu = 0.2
         numerator = young_mod * nu
@@ -248,7 +248,7 @@ class SnowSolver:
                 # self.ps.for_all_neighbors(i, self.helper_a_lambda_fluid_neighbors, a_lambda)
                 # self.ps.for_all_b_neighbors(i, self.helper_a_lambda_b, a_lambda)
                 
-                a_lambda = -1.0 / self.ps.density[i] * self.ps.pressure_gradient[i]
+                a_lambda = -(self.ps.density[i] / self.ps.rest_density[i]) / self.ps.density[i] * self.ps.pressure_gradient[i]
             # a_lambda = ti.Vector([0.0, 9.81, 0.0])
             self.ps.acceleration[i] += a_lambda
             # if i[0] == 0:
