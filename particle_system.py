@@ -31,6 +31,9 @@ class ParticleSystem:
         # self.num_grid_cells = int(self.cfg.grid_size ** 3)
         self.max_particles_per_cell = self.cfg.grid_max_particles_per_cell
 
+        self.friction_coef = self.cfg.friction
+        self.m_psi = self.cfg.m_psi
+
         # allocate memory
         self.allocate_fields()
         self.initialize_fields()
@@ -103,34 +106,34 @@ class ParticleSystem:
         ])
         self.colors = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
 
-    # @ti.kernel
-    def initialize_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template(), positions:ti.template()):
+    @ti.kernel
+    def initialize_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template()):
         # print("Block length", block_length)
         # block_position = origin
         # positions = ti.Vector.field(3, dtype=float, shape=int(len_x / self.particle_radius) * int(len_z / self.particle_radius) * int(len_y / self.particle_radius))
         for i in range(self.num_particles):
-            positions[i] = ti.Vector([0.0, 0.0, 0.0])
+            self.position[i] = ti.Vector([0.0, 0.0, 0.0])
         for i in range(int(len_x / self.particle_radius)):
             for j in range(int(len_z / self.particle_radius)):
                 for k in range(int(len_y / self.particle_radius)):
                     x = i * (self.particle_radius) + origin[0]
                     y = j * (self.particle_radius) + origin[2]
                     z = k * (self.particle_radius) + origin[1]
-                    positions[int(k * (len_x / self.particle_radius) * (len_z / self.particle_radius) + j * (len_x / self.particle_radius) + i)] = ti.Vector([x, z, y])
-
-    def initialize_boundary_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template(), positions:ti.template()):
+                    self.position[int(k * (len_x / self.particle_radius) * (len_z / self.particle_radius) + j * (len_x / self.particle_radius) + i)] = ti.Vector([x, z, y])
+    @ti.kernel
+    def initialize_boundary_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template()):
         # print("Block length", block_length)
         # block_position = origin
         # positions = ti.Vector.field(3, dtype=float, shape=int(len_x / self.particle_radius) * int(len_z / self.particle_radius) * int(len_y / self.particle_radius))
         for i in range(self.num_particles):
-            positions[i] = ti.Vector([0.0, 0.0, 0.0])
+            self.boundary_particles[i] = ti.Vector([0.0, 0.0, 0.0])
         for i in range(int(len_x / self.boundary_particle_radius)):
             for j in range(int(len_z / self.boundary_particle_radius)):
                 for k in range(int(len_y / self.boundary_particle_radius)):
                     x = i * (self.boundary_particle_radius) + origin[0]
                     y = j * (self.boundary_particle_radius) + origin[2]
                     z = k * (self.boundary_particle_radius) + origin[1]
-                    positions[int(k * (len_x / self.boundary_particle_radius) * (len_z / self.boundary_particle_radius) + j * (len_x / self.boundary_particle_radius) + i)] = ti.Vector([x, z, y])
+                    self.boundary_particles[int(k * (len_x / self.boundary_particle_radius) * (len_z / self.boundary_particle_radius) + j * (len_x / self.boundary_particle_radius) + i)] = ti.Vector([x, z, y])
 
 
     @ti.kernel
@@ -172,7 +175,7 @@ class ParticleSystem:
         if self.initialize_type == 'block':
             block_origin = ti.field(float, 3)
             block_origin.from_numpy(self.cfg.block_origin)
-            self.initialize_particle_block(self.cfg.block_length, self.cfg.block_height, self.cfg.block_width, block_origin, self.position)
+            self.initialize_particle_block(self.cfg.block_length, self.cfg.block_height, self.cfg.block_width, block_origin)
         else:
             self.initialize_random_particles()
         self.fluid_grid.update_grid(self.position)
@@ -188,7 +191,7 @@ class ParticleSystem:
         # self.boundary_initialize()
         boundary_origin = ti.field(float, 3)
         boundary_origin.from_numpy(self.cfg.boundary_origin)
-        self.initialize_boundary_particle_block(self.cfg.boundary_length, self.cfg.boundary_height, self.cfg.boundary_width, boundary_origin, self.boundary_particles)
+        self.initialize_boundary_particle_block(self.cfg.boundary_length, self.cfg.boundary_height, self.cfg.boundary_width, boundary_origin)
         self.b_grid.update_grid(self.boundary_particles)
         self.boundary_velocity_initialize()
         self.gradient_initialize()
@@ -289,5 +292,4 @@ class ParticleSystem:
         self.scene.particles(self.position, color = (0.99, 0.99, 0.99), radius = self.particle_radius, per_vertex_color=self.colors)
         self.scene.particles(self.boundary_particles, per_vertex_color=self.boundary_colors,
                               radius = self.boundary_particle_radius)
-
 

@@ -9,7 +9,6 @@ class PressureSolver:
     def __init__(self, ps: ParticleSystem):
         self.ps = ps
         self.numerical_eps = 1e-5
-        self.m_psi = 1.5
 
     @ti.func
     def vel_div(self, i, k, sum:ti.template()):
@@ -17,7 +16,7 @@ class PressureSolver:
 
     @ti.func
     def vel_div_b(self, i, b, sum:ti.template()):
-        sum += self.ps.boundary_particles_volume[b] * (-self.ps.velocity_star[i]).dot(cubic_kernel_derivative(self.ps.position[i]-self.ps.boundary_particles[b], self.ps.smoothing_radius))
+        sum += self.ps.boundary_particles_volume[b] * (self.ps.boundary_velocity[b]-self.ps.velocity_star[i]).dot(cubic_kernel_derivative(self.ps.position[i]-self.ps.boundary_particles[b], self.ps.smoothing_radius))
 
 
     # consider: https://en.wikipedia.org/wiki/Jacobi_method
@@ -25,6 +24,7 @@ class PressureSolver:
     def compute_A_p(self, i, deltaTime, density_error:ti.template()):
         deltaTime2 = deltaTime * deltaTime
         self.ps.pressure_laplacian[i] = 0.0
+
         lp_i = 0.0
         self.ps.for_all_neighbors(i, self.helper_diff_of_pressure_grad, lp_i)
         lp2 = 0.0
@@ -58,8 +58,10 @@ class PressureSolver:
     @ti.func
     def compute_pressure_gradient(self, i):
         self.ps.pressure_gradient[i] = ti.Vector([0.0, 0.0, 0.0])
+
         sum_of_pressures = ti.Vector([0.0, 0.0, 0.0])
         self.ps.for_all_neighbors(i, self.helper_sum_of_pressure, sum_of_pressures)
+
         sum_of_b = ti.Vector([0.0, 0.0, 0.0])
         self.ps.for_all_b_neighbors(i, self.helper_Vb, sum_of_b)
         self.ps.pressure_gradient[i] = sum_of_pressures + self.ps.rest_density[i] * self.ps.pressure[i] * sum_of_b
@@ -96,7 +98,7 @@ class PressureSolver:
         self.ps.for_all_neighbors(i, self.helper_ViVj, ViVj)
         self.ps.for_all_neighbors(i, self.helper_Vj, Vj)
         self.ps.for_all_b_neighbors(i, self.helper_Vb, Vb)
-        self.ps.jacobian_diagonal[i] = p_lame - deltaTime2 * ViVj - deltaTime2 * (Vj + self.m_psi * Vb).dot(Vj + Vb)
+        self.ps.jacobian_diagonal[i] = p_lame - deltaTime2 * ViVj - deltaTime2 * (Vj + self.ps.m_psi * Vb).dot(Vj + Vb)
 
     @ti.kernel
     def implicit_solver_prepare(self, deltaTime: float):
