@@ -94,7 +94,7 @@ class SnowSolver:
 
     @ti.kernel
     def compute_boundary_volumes(self):
-        correction = 0.8
+        correction = 1.8
         for i in range(self.ps.num_b_particles):
             kernel_sum = 0.0
             for j in range(self.ps.num_b_particles):
@@ -181,9 +181,9 @@ class SnowSolver:
         density_i = 0.0
         self.ps.for_all_neighbors(i, self.calc_density, density_i)
         self.ps.density[i] = density_i
+        self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
 
         self.ps.rest_density[i] = self.ps.density[i] * detF
-        self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
         # Eq 21 from the paper, we use only the fluid particles to compute rest denstiy
         self.ps.density[i] = density_i
 
@@ -248,7 +248,7 @@ class SnowSolver:
                 # self.ps.for_all_neighbors(i, self.helper_a_lambda_fluid_neighbors, a_lambda)
                 # self.ps.for_all_b_neighbors(i, self.helper_a_lambda_b, a_lambda)
                 
-                a_lambda = -1.0 / self.ps.rest_density[i] * self.ps.pressure_gradient[i]
+                a_lambda = -1.0 / self.ps.density[i] * self.ps.pressure_gradient[i]
             # a_lambda = ti.Vector([0.0, 9.81, 0.0])
             self.ps.acceleration[i] += a_lambda
             # if i[0] == 0:
