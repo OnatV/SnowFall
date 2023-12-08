@@ -31,6 +31,9 @@ class ParticleSystem:
         # self.num_grid_cells = int(self.cfg.grid_size ** 3)
         self.max_particles_per_cell = self.cfg.grid_max_particles_per_cell
 
+        self.friction_coef = self.cfg.friction
+        self.m_psi = self.cfg.m_psi
+
         # allocate memory
         self.allocate_fields()
         self.initialize_fields()

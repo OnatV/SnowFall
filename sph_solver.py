@@ -25,8 +25,7 @@ class SnowSolver:
         # self.a_other = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         self.wind_enabled = ps.enable_wind
         self.numerical_eps = 1e-6
-        self.m_psi = 10
-        self.friction_coef = 0.2
+        self.friction_coef = self.ps.friction_coef
 
         self.h = 2 * self.ps.boundary_particle_radius ##Particle Spacing 
         # self.init_kernel_lookup()

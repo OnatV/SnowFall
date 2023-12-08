@@ -9,7 +9,6 @@ class PressureSolver:
     def __init__(self, ps: ParticleSystem):
         self.ps = ps
         self.numerical_eps = 1e-5
-        self.m_psi = 3.0
 
     @ti.func
     def vel_div(self, i, k, sum:ti.template()):
@@ -30,7 +29,7 @@ class PressureSolver:
         self.ps.for_all_neighbors(i, self.helper_diff_of_pressure_grad, lp_i)
         lp2 = 0.0
         self.ps.for_all_b_neighbors(i, self.helper_diff_of_pressure_grad_b, lp2)
-        self.ps.pressure_laplacian[i] = lp_i + self.m_psi * lp2
+        self.ps.pressure_laplacian[i] = lp_i + self.ps.m_psi * lp2
         # now compute Ap
         A_p = -self.ps.rest_density[i] / ti.math.max(self.ps.lambda_t_i[i], self.numerical_eps) * self.ps.pressure[i] + deltaTime2 * self.ps.pressure_laplacian[i]
         aii = self.ps.jacobian_diagonal[i]
@@ -66,7 +65,7 @@ class PressureSolver:
         sum_of_b = ti.Vector([0.0, 0.0, 0.0])
         self.ps.for_all_b_neighbors(i, self.helper_Vb, sum_of_b)
 
-        self.ps.pressure_gradient[i] = sum_of_pressures + self.m_psi * self.ps.pressure[i] * sum_of_b
+        self.ps.pressure_gradient[i] = sum_of_pressures + self.ps.m_psi * self.ps.pressure[i] * sum_of_b
 
 
     @ti.func
@@ -100,7 +99,7 @@ class PressureSolver:
         self.ps.for_all_neighbors(i, self.helper_ViVj, ViVj)
         self.ps.for_all_neighbors(i, self.helper_Vj, Vj)
         self.ps.for_all_b_neighbors(i, self.helper_Vb, Vb)
-        self.ps.jacobian_diagonal[i] = p_lame - deltaTime2 * ViVj - deltaTime2 * (Vj + self.m_psi * Vb).dot(Vj + Vb)
+        self.ps.jacobian_diagonal[i] = p_lame - deltaTime2 * ViVj - deltaTime2 * (Vj + self.ps.m_psi * Vb).dot(Vj + Vb)
 
     @ti.kernel
     def implicit_solver_prepare(self, deltaTime: float):
