@@ -20,7 +20,7 @@ class FluidGrid:
         ## create the grid
         print(f"Creating a grid with dimension {self.grid_size_x}, {self.grid_size_y}, {self.grid_size_z}")
         # self.grid_cells = ti.field(ti.root.dynamic(ti.i, 1024, chunk_size=32), shape=(self.grid_size_x * self.grid_size_y * self.grid_size_z))
-        self.handle = ti.root.dense(ti.i, (self.num_cells) ).dynamic(ti.j, 1000, chunk_size=8)
+        self.handle = ti.root.dense(ti.i, (self.num_cells) ).dynamic(ti.j, 4000, chunk_size=8)
         self.grid = ti.field(int)
         self.handle.place(self.grid)
 
@@ -66,7 +66,7 @@ class FluidGrid:
         '''
         grid_idx = self.to_grid_idx(positions[i])
         ###Iterate over all neighbours of grid cell i
-        #ti.loop_config(serialize=True)
+        ti.loop_config(serialize=True)
         for g in ti.grouped(ti.ndrange(*((-1, 2),) * 3)):
             current_grid = (
                 ti.math.clamp(grid_idx[0] + g[0], 0, self.grid_size_x),
@@ -77,8 +77,8 @@ class FluidGrid:
             current_arr = self.grid_to_array_index(current_grid[0], current_grid[1], current_grid[2])
             current_arr = ti.math.min(self.num_cells - 1, current_arr) # guard against particles that are outside the grid
             current_arr = ti.math.max(0, current_arr)
-            #ti.loop_config(serialize=True)
             # print("h")
+            ti.loop_config(serialize=True)
             for j in range(self.grid[current_arr].length()):
                 p_j = self.grid[current_arr, j] # Get point idx
                 if (positions[i] - positions[p_j]).norm() < h:

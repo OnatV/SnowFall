@@ -173,8 +173,8 @@ class ParticleSystem:
         for i in range(self.num_b_particles):
             self.boundary_colors[i] = ti.Vector([1.0, 1.0, 1.0])
 
-
-        self.initialize_particle_block(0.5, 0.06, 0.5, ti.Vector([0.25, 0.25, 0.25]), self.boundary_particles)
+        # self.boundary_initialize()
+        self.initialize_particle_block(0.5, 0.02, 0.5, ti.Vector([0.25, 0.25, 0.25]), self.boundary_particles)
         self.b_grid.update_grid(self.boundary_particles)
         self.boundary_velocity_initialize()
         self.gradient_initialize()

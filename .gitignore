@@ -166,3 +166,8 @@ profiling/
 # IDE
 
 .vscode/
+*.npy
+
+
+# dataset
+*.hdf5

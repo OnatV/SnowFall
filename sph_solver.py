@@ -165,8 +165,8 @@ class SnowSolver:
         p_0 = self.ps.init_density
         k = numerator / denom
         self.ps.lambda_t_i[i] = k * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
-        if (i[0] == 0):
-            print("self.ps.lambda_t_i[i]", self.ps.lambda_t_i[i])
+        # if (i[0] == 0):
+            # print("self.ps.lambda_t_i[i]", self.ps.lambda_t_i[i])
 
     @ti.func
     def compute_rest_density(self, i):
@@ -188,8 +188,8 @@ class SnowSolver:
 
         self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
         self.ps.density[i] = density_i
-        if i[0] == 0:
-            print("density", density_i)
+        # if i[0] == 0:
+            # print("density", density_i)
 
     @ti.func
     def calc_density(self, i_idx, j_idx, d:ti.template()):
@@ -251,8 +251,8 @@ class SnowSolver:
                 a_lambda = -1.0 / self.ps.density[i] * self.ps.pressure_gradient[i]
             # a_lambda = ti.Vector([0.0, 9.81, 0.0])
             self.ps.acceleration[i] += a_lambda
-            if i[0] == 0:
-                print("a_lambda", a_lambda)
+            # if i[0] == 0:
+                # print("a_lambda", a_lambda)
     
     @ti.func
     def nan_check(self) -> bool:
@@ -567,6 +567,6 @@ class SnowSolver:
         # update time
         self.time += deltaTime
         # print(self.ps.position[0])
-        print("Step", self.ps.position[0][1] - 0.35)
+        # print("Step", self.ps.position[0][1] - 0.35)
 
     
