@@ -31,7 +31,7 @@ class PressureSolver:
         self.ps.for_all_b_neighbors(i, self.helper_diff_of_pressure_grad_b, lp2)
         self.ps.pressure_laplacian[i] = lp_i + self.m_psi * lp2
         # now compute Ap
-        A_p = -self.ps.rest_density[i] / ti.math.max(self.ps.lambda_t_i[i], self.numerical_eps) * self.ps.pressure[i] + deltaTime2 * lp_i
+        A_p = -self.ps.rest_density[i] / ti.math.max(self.ps.lambda_t_i[i], self.numerical_eps) * self.ps.pressure[i] + deltaTime2 * self.ps.pressure_laplacian[i]
         aii = self.ps.jacobian_diagonal[i]
         residuum = self.ps.rest_density[i] - self.ps.p_star[i] - A_p
         pi = (0.5 / (ti.math.sign(aii) * ti.math.max(ti.abs(aii), self.numerical_eps))) * residuum
