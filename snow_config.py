@@ -40,18 +40,32 @@ class SnowConfig:
         self.domain_size = list2vec(config['SIMULATION']['domain_size'])
         self.deltaTime = float(config['SIMULATION']['delta_time'])
         self.particle_radius = float(config['SIMULATION']['particle_radius'])
+        self.boundary_particle_radius = float(config['SIMULATION']['boundary_particle_radius'])
         self.smoothing_radius_ratio = float(config['SIMULATION']['smoothing_radius_ratio'])
         # # self.grid_spacing = 0.01 ##Spacing between grid cells should be close to particle radius
         self.grid_max_particles_per_cell = int(config['SIMULATION']['max_particles_per_cell']) ##Needed because taichi doesn't support dynamic arrays well, can be decreased if grid spacing is decreased        
         # # values from paper
         self.initialize_type = config['SIMULATION']['initialize_type']
-
+        self.max_time = float(config['SIMULATION']['max_time'])
         if 'BLOCK' in config.keys():
             self.block_origin = list2vec(config['BLOCK']['position'])
             self.block_length = float(config['BLOCK']['length'])
             self.block_width = float(config['BLOCK']['width'])
             self.block_height = float(config['BLOCK']['height'])
             self.num_particles = int((self.block_length / self.particle_radius) * (self.block_width / self.particle_radius) * (self.block_height / self.particle_radius))
+
+        if 'LOGGING' in config.keys(): # consider changing for upper/lowercase matches
+            self.logging = config['LOGGING']['logging'] == 'true'
+            self.log_dir = config['LOGGING']['log_dir']
+            self.logging_fields = config['LOGGING']['fields']
+            self.log_fps = float(config['LOGGING']['fps'])
+
+        if 'BOUNDARY' in config.keys():
+            self.boundary_origin = list2vec(config['BOUNDARY']['position'])
+            self.boundary_length = float(config['BOUNDARY']['length'])
+            self.boundary_width = float(config['BOUNDARY']['width'])
+            self.boundary_height = float(config['BOUNDARY']['height'])
+            self.num_boundary_particles = int((self.boundary_length / self.boundary_particle_radius) * (self.boundary_width / self.boundary_particle_radius) * (self.boundary_height / self.boundary_particle_radius))
 
         print(self.initialize_type)
 def list2vec(strlist: str):

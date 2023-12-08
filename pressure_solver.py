@@ -9,7 +9,7 @@ class PressureSolver:
     def __init__(self, ps: ParticleSystem):
         self.ps = ps
         self.numerical_eps = 1e-5
-        self.m_psi = 1.5
+        self.m_psi = 3.0
 
     @ti.func
     def vel_div(self, i, k, sum:ti.template()):
@@ -135,9 +135,10 @@ class PressureSolver:
             print("avg_density_error", avg_density_error)
             print("pressure", self.ps.pressure[0])
             print("rest density", self.ps.rest_density[0])
-            print("density", self.ps.rest_density[0])
+            print("density", self.ps.density[0])
             print("adv density", self.ps.p_star[0])
             print("pressure_gradient", self.ps.pressure_gradient[0])
+            print("a_lambda", -self.ps.pressure_gradient[0] / self.ps.density[0])
             print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
             if np.isnan(avg_density_error):
                 is_solved = False
