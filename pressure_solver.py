@@ -122,7 +122,7 @@ class PressureSolver:
             self.compute_jacobian_diagonal_entry(i, deltaTime)
 
     def implicit_pressure_solve(self, deltaTime:float) -> bool:
-        max_iterations = 15
+        max_iterations = 100
         min_iterations = 3 # in paper, seemed to converge in 5 iterations or less
         is_solved = False
         it = 0
