@@ -280,13 +280,24 @@ class SnowSolver:
     @ti.func
     def aux_correction_matrix(self, i_idx, j_idx, res:ti.template()):
         '''
-            Helper of self.compute_correction_matrix
+            Helper of self.compute_correction_matrix for fluid particles
         '''
         x_ij = self.ps.position[i_idx] - self.ps.position[j_idx] # x_ij: vec3
         w_ij = cubic_kernel_derivative(x_ij, self.ps.smoothing_radius)
         v_j = self.get_volume(j_idx)
 
-        res += (v_j * w_ij).outer_product(x_ij)
+        res += (v_j * w_ij).outer_product(-1 * x_ij)
+
+    @ti.func
+    def aux_correction_matrix_b(self, i_idx, b_idx, res:ti.template()):
+        '''
+            Helper of self.compute_correction_matrix for boundary particles
+        '''
+        x_ib = self.ps.position[i_idx] - self.ps.boundary_particles[b_idx] # x_ij: vec3
+        w_ib = cubic_kernel_derivative(x_ib, self.ps.smoothing_radius)
+        V_b =  self.ps.boundary_particles_volume[b_idx]
+
+        res += (V_b * w_ib).outer_product(-1 * x_ib)
 
     @ti.func
     def compute_correction_matrix(self, i):
@@ -304,6 +315,7 @@ class SnowSolver:
         self.ps.is_pseudo_L_i[i] = False
         tmp_i = ti.Matrix.zero(dt=float, n=3, m=3)
         self.ps.for_all_neighbors(i, self.aux_correction_matrix, tmp_i)
+        self.ps.for_all_b_neighbors(i, self.aux_correction_matrix_b, tmp_i)
 
         det = ti.Matrix.determinant(tmp_i)
         if det != 0: 
@@ -454,25 +466,6 @@ class SnowSolver:
         #     print("---Vi---", V_i_prime)
         return V_i_prime + R_i_tilde + S_i_tilde
     
-    # @ti.func
-    # def helper_compute_velocity_gradient_corrected(self, i_idx, j_idx, res:ti.template()):
-    #     '''
-    #         Helper of self.compute_correction_matrix. 
-    #         Needs to be separated for boundary in snow in the future.
-    #     '''
-    #     v_j = self.ps.velocity[j_idx]
-    #     v_i = self.ps.velocity[i_idx]
-    #     x_ij = self.ps.position[i_idx] - self.ps.position[j_idx]
-    #     V_j = self.get_volume(j_idx)
-
-    #     L_i = self.ps.correction_matrix[i_idx]
-    #     if self.ps.is_pseudo_L_i[i_idx]:
-    #         L_i = self.ps.pseudo_correction_matrix[i_idx]
-            
-    #     del_w_ij = cubic_kernel_derivative(x_ij, self.ps.smoothing_radius)
-    #     corrected_del_w_ij = L_i @ del_w_ij
-
-    #     res += (v_j - v_i).outer_product(V_j * corrected_del_w_ij)
 
     @ti.func
     def helper_compute_velocity_gradient_uncorrected(self, i_idx, j_idx, res:ti.template()):
