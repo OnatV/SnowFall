@@ -82,7 +82,7 @@ class ParticleSystem:
         # self.boundary_particle_spacing = self.boundary_particle_radius # important quantity for figuring out boundary volume
         # boundary particles
 
-        self.num_b_particles = 1875
+        self.num_b_particles = 4000
         self.boundary_particles = ti.Vector.field(self.dim, dtype=float,  shape=self.num_b_particles)
         self.boundary_velocity = ti.Vector.field(self.dim, dtype=float, shape=self.num_b_particles)
 

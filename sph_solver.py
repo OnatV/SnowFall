@@ -28,6 +28,7 @@ class SnowSolver:
         self.m_psi = 10
         self.friction_coef = 0.2
 
+        self.h = 2 * self.ps.boundary_particle_radius ##Particle Spacing 
         # self.init_kernel_lookup()
         # TO DO: COMPUTE ADAPTIVE CORRECTION FACTORR
         self.gamma_1 = ti.field(float, shape=self.ps.num_particles)
@@ -346,8 +347,8 @@ class SnowSolver:
         grad_kernel_ib = cubic_kernel_derivative(
             self.ps.position[i_idx] - self.ps.boundary_particles[b_idx], self.ps.smoothing_radius
         )
-        h = 2 * self.ps.boundary_particle_radius
-        sum += self.ps.boundary_particles_volume[b_idx] * x_ib.dot(grad_kernel_ib) * self.ps.boundary_velocity[b_idx] / (x_ib.norm_sqr() + 0.01 * h * h)
+       
+        sum += self.ps.boundary_particles_volume[b_idx] * x_ib.dot(grad_kernel_ib) * self.ps.boundary_velocity[b_idx] / (x_ib.norm_sqr() + 0.01 * self.h * self.h)
 
     @ti.func
     def compute_accel_friction(self, i, deltaTime:float):
@@ -381,11 +382,10 @@ class SnowSolver:
         
         x_ib = self.ps.position[i_idx] - self.ps.boundary_particles[b_idx]
         grad_kernel_ib = cubic_kernel_derivative(
-            self.ps.position[i_idx] - self.ps.boundary_particles[b_idx], self.ps.smoothing_radius
+            x_ib, self.ps.smoothing_radius
         )
-        h = 2 * self.ps.boundary_particle_radius
 
-        denom = (x_ib.norm_sqr() + 0.01 * h * h)
+        denom = (x_ib.norm_sqr() + 0.01 * self.h * self.h)
         sum += self.ps.boundary_particles_volume[b_idx] * x_ib.dot(grad_kernel_ib) / denom
 
 
@@ -435,40 +435,47 @@ class SnowSolver:
         ##Currently only computes the gradient using snow particles, ie no boundary Eq.17
         grad_v_i_s_prime = ti.Matrix.zero(dt=float, n=3, m=3)
         self.ps.for_all_neighbors(i, self.helper_compute_velocity_gradient_uncorrected, grad_v_i_s_prime)
-        grad_v_i_s_tilde = ti.Matrix.zero(dt=float, n=3, m=3)
+
+        grad_v_i_b_prime = ti.Matrix.zero(dt=float, n=3, m=3)
+        self.ps.for_all_b_neighbors(i, self.helper_compute_velocity_gradient_b_uncorrected, grad_v_i_b_prime)
+
+        L_i = self.ps.correction_matrix[i]
+        if self.ps.is_pseudo_L_i[i]:
+            L_i = self.ps.pseudo_correction_matrix[i]
+
+        ##In the Paragraph between Eq17 and Eq18
+        grad_v_i_tilde = grad_v_i_s_prime @ L_i.transpose() + (grad_v_i_b_prime  @ L_i.transpose()).trace() * ti.Matrix.identity(float, 3) / 3
         
-        V_i_prime = grad_v_i_s_prime.trace() * ti.Matrix.identity(float, 3) / 3
-        R_i_tilde = (grad_v_i_s_tilde - grad_v_i_s_tilde.transpose()) / 2 
-        S_i_tilde = (grad_v_i_s_tilde + grad_v_i_s_tilde.transpose()) / 2 - grad_v_i_s_tilde.trace() * ti.Matrix.identity(float, 3) / 3
+        V_i_prime = (grad_v_i_s_prime + grad_v_i_b_prime).trace() * ti.Matrix.identity(float, 3) / 3
+        R_i_tilde = (grad_v_i_tilde - grad_v_i_tilde.transpose()) / 2 
+        S_i_tilde = (grad_v_i_tilde + grad_v_i_tilde.transpose()) / 2 - grad_v_i_tilde.trace() * ti.Matrix.identity(float, 3) / 3
 
         return V_i_prime + R_i_tilde + S_i_tilde
     
-    @ti.func
-    def helper_compute_velocity_gradient_corrected(self, i_idx, j_idx, res:ti.template()):
-        '''
-            Helper of self.compute_correction_matrix. 
-            Needs to be separated for boundary in snow in the future.
-        '''
-        v_j = self.ps.velocity[j_idx]
-        v_i = self.ps.velocity[i_idx]
-        x_ij = self.ps.position[i_idx] - self.ps.position[j_idx]
-        V_j = self.get_volume(j_idx)
+    # @ti.func
+    # def helper_compute_velocity_gradient_corrected(self, i_idx, j_idx, res:ti.template()):
+    #     '''
+    #         Helper of self.compute_correction_matrix. 
+    #         Needs to be separated for boundary in snow in the future.
+    #     '''
+    #     v_j = self.ps.velocity[j_idx]
+    #     v_i = self.ps.velocity[i_idx]
+    #     x_ij = self.ps.position[i_idx] - self.ps.position[j_idx]
+    #     V_j = self.get_volume(j_idx)
 
-        if self.ps.is_pseudo_L_i[i_idx]:
-            L_i = self.ps.pseudo_correction_matrix[i_idx]
-        else:
-            L_i = self.ps.correction_matrix[i_idx]
+    #     L_i = self.ps.correction_matrix[i_idx]
+    #     if self.ps.is_pseudo_L_i[i_idx]:
+    #         L_i = self.ps.pseudo_correction_matrix[i_idx]
+            
+    #     del_w_ij = cubic_kernel_derivative(x_ij, self.ps.smoothing_radius)
+    #     corrected_del_w_ij = L_i @ del_w_ij
 
-        del_w_ij = cubic_kernel_derivative(x_ij, self.ps.smoothing_radius)
-        corrected_del_w_ij = L_i @ del_w_ij
-
-        res += (v_j - v_i).outer_product(V_j * corrected_del_w_ij)
+    #     res += (v_j - v_i).outer_product(V_j * corrected_del_w_ij)
 
     @ti.func
     def helper_compute_velocity_gradient_uncorrected(self, i_idx, j_idx, res:ti.template()):
         '''
-            Helper of self.compute_correction_matrix. 
-            Needs to be separated for boundary in snow in the future.
+            Helper of self.compute_correction_matrix. Computes sum in Eq.17 For the fluid particles.
         '''
         v_j = self.ps.velocity[j_idx] # v_j: vec3
         v_i = self.ps.velocity[i_idx] # v_i: vec3
@@ -476,6 +483,19 @@ class SnowSolver:
         del_w_ij = cubic_kernel_derivative(x_ij, self.ps.smoothing_radius) # del_w_ij: vec3
         V_j = self.get_volume(j_idx) # V_j: float
 
+        res += (v_j - v_i).outer_product(V_j * del_w_ij)
+
+    @ti.func
+    def helper_compute_velocity_gradient_b_uncorrected(self, i_idx, j_idx, res:ti.template()):
+        '''
+            Helper of self.compute_correction_matrix. Computes sum in Eq.17 For the boundary particles.
+        '''
+        v_j = self.ps.boundary_velocity[j_idx] # v_j: vec3
+        v_i = self.ps.velocity[i_idx] # v_i: vec3
+        x_ij = self.ps.position[i_idx] - self.ps.position[j_idx] # x_ij: vec3
+        del_w_ij = cubic_kernel_derivative(x_ij, self.ps.smoothing_radius) # del_w_ij: vec3
+    
+        V_j = self.ps.boundary_particles_volume[j_idx]
         res += (v_j - v_i).outer_product(V_j * del_w_ij)
 
     @ti.func
@@ -507,7 +527,7 @@ class SnowSolver:
             # these functions should update the acceleration field of the particles
             self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-5
             # print("before solve a")
-            # self.solve_a_lambda(deltaTime) # Step 6
+            self.solve_a_lambda(deltaTime) # Step 6
             # self.solve_a_G()             #Step 7 
             self.integrate_velocity(deltaTime) # Step 8-9
             self.integrate_deformation_gradient(deltaTime) #Step 10-11
