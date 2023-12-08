@@ -13,7 +13,8 @@ class ParticleSystem:
         self.num_particles = self.cfg.num_particles
         self.domain_end = self.domain_start + self.domain_size
         self.particle_radius = self.cfg.particle_radius 
-        self.boundary_particle_radius = 0.25 * self.particle_radius # move to config
+        self.boundary_particle_radius = self.cfg.boundary_particle_radius # move to config
+        self.num_b_particles = self.cfg.num_boundary_particles
         self.dim = 3 # 3D simulation
         self.init_density = self.cfg.init_density
         self.gravity = ti.Vector(self.cfg.gravity)
@@ -81,8 +82,6 @@ class ParticleSystem:
         self.padding = 0.1 * self.grid_spacing
         # self.boundary_particle_spacing = self.boundary_particle_radius # important quantity for figuring out boundary volume
         # boundary particles
-
-        self.num_b_particles = 16 * 2500
         self.boundary_particles = ti.Vector.field(self.dim, dtype=float,  shape=self.num_b_particles)
         self.boundary_velocity = ti.Vector.field(self.dim, dtype=float, shape=self.num_b_particles)
 
@@ -187,7 +186,9 @@ class ParticleSystem:
             self.boundary_colors[i] = ti.Vector([1.0, 1.0, 1.0])
 
         # self.boundary_initialize()
-        self.initialize_boundary_particle_block(1.0, 0.02, 1.0, ti.Vector([0.0, 0.25, 0.0]), self.boundary_particles)
+        boundary_origin = ti.field(float, 3)
+        boundary_origin.from_numpy(self.cfg.boundary_origin)
+        self.initialize_boundary_particle_block(self.cfg.boundary_length, self.cfg.boundary_height, self.cfg.boundary_width, boundary_origin, self.boundary_particles)
         self.b_grid.update_grid(self.boundary_particles)
         self.boundary_velocity_initialize()
         self.gradient_initialize()
