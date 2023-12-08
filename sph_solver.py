@@ -156,7 +156,7 @@ class SnowSolver:
         '''
             Section 3.3.2
         '''
-        young_mod = 140_000
+        young_mod = 1_000_000
         xi = 10.0
         nu = 0.2
         numerator = young_mod * nu
