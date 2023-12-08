@@ -288,6 +288,7 @@ class SnowSolver:
 
         res += (v_j * w_ij).outer_product(-1 * x_ij)
 
+    @ti.func
     def aux_correction_matrix_b(self, i_idx, b_idx, res:ti.template()):
         '''
             Helper of self.compute_correction_matrix for boundary particles
