@@ -182,12 +182,12 @@ class SnowSolver:
         self.ps.for_all_neighbors(i, self.calc_density, density_i)
         self.ps.density[i] = density_i
 
-        # Eq 21 from the paper, we use only the fluid particles to compute rest denstiy
         self.ps.rest_density[i] = self.ps.density[i] * detF
-
-
         self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
+        # Eq 21 from the paper, we use only the fluid particles to compute rest denstiy
         self.ps.density[i] = density_i
+
+
         # if i[0] == 0:
             # print("density", density_i)
 
@@ -248,11 +248,11 @@ class SnowSolver:
                 # self.ps.for_all_neighbors(i, self.helper_a_lambda_fluid_neighbors, a_lambda)
                 # self.ps.for_all_b_neighbors(i, self.helper_a_lambda_b, a_lambda)
                 
-                a_lambda = -1.0 / self.ps.density[i] * self.ps.pressure_gradient[i]
+                a_lambda = -1.0 / self.ps.rest_density[i] * self.ps.pressure_gradient[i]
             # a_lambda = ti.Vector([0.0, 9.81, 0.0])
             self.ps.acceleration[i] += a_lambda
             # if i[0] == 0:
-                # print("a_lambda", a_lambda)
+            #     print("a_lambda", a_lambda)
     
     @ti.func
     def nan_check(self) -> bool:
@@ -361,7 +361,7 @@ class SnowSolver:
 
         denom = self.ps.friction_diagonal[i][0] * deltaTime
         nom = self.ps.velocity[i] + deltaTime * self.ps.acceleration[i] - deltaTime * self.friction_coef * sum_term 
-        self.ps.acceleration[i] += nom / denom
+        # self.ps.acceleration[i] += nom / denom
 
     @ti.func
     def compute_friction_diagonal(self,i, deltaTime:float):
@@ -442,14 +442,16 @@ class SnowSolver:
         L_i = self.ps.correction_matrix[i]
         if self.ps.is_pseudo_L_i[i]:
             L_i = self.ps.pseudo_correction_matrix[i]
-
+        # if(i[0] == 0):
+        #     print("---LI---", L_i)
         ##In the Paragraph between Eq17 and Eq18
         grad_v_i_tilde = grad_v_i_s_prime @ L_i.transpose() + (grad_v_i_b_prime  @ L_i.transpose()).trace() * ti.Matrix.identity(float, 3) / 3
         
         V_i_prime = (grad_v_i_s_prime + grad_v_i_b_prime).trace() * ti.Matrix.identity(float, 3) / 3
         R_i_tilde = (grad_v_i_tilde - grad_v_i_tilde.transpose()) / 2 
         S_i_tilde = (grad_v_i_tilde + grad_v_i_tilde.transpose()) / 2 - grad_v_i_tilde.trace() * ti.Matrix.identity(float, 3) / 3
-
+        # if(i[0] == 0):
+        #     print("---Vi---", V_i_prime)
         return V_i_prime + R_i_tilde + S_i_tilde
     
     # @ti.func
@@ -483,7 +485,7 @@ class SnowSolver:
         del_w_ij = cubic_kernel_derivative(x_ij, self.ps.smoothing_radius) # del_w_ij: vec3
         V_j = self.get_volume(j_idx) # V_j: float
 
-        res += (v_j - v_i).outer_product(V_j * del_w_ij)
+        res += (v_j - v_i).outer_product(V_j * del_w_ij) 
 
     @ti.func
     def helper_compute_velocity_gradient_b_uncorrected(self, i_idx, j_idx, res:ti.template()):
@@ -492,7 +494,7 @@ class SnowSolver:
         '''
         v_j = self.ps.boundary_velocity[j_idx] # v_j: vec3
         v_i = self.ps.velocity[i_idx] # v_i: vec3
-        x_ij = self.ps.position[i_idx] - self.ps.position[j_idx] # x_ij: vec3
+        x_ij = self.ps.position[i_idx] - self.ps.boundary_particles[j_idx] # x_ij: vec3
         del_w_ij = cubic_kernel_derivative(x_ij, self.ps.smoothing_radius) # del_w_ij: vec3
     
         V_j = self.ps.boundary_particles_volume[j_idx]
