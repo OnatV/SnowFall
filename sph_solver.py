@@ -286,7 +286,7 @@ class SnowSolver:
         w_ij = cubic_kernel_derivative(x_ij, self.ps.smoothing_radius)
         v_j = self.get_volume(j_idx)
 
-        res += (v_j * w_ij).outer_product(x_ij)
+        res += (v_j * w_ij).outer_product(-1 * x_ij)
 
     @ti.func
     def compute_correction_matrix(self, i):
