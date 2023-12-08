@@ -372,7 +372,7 @@ class SnowSolver:
 
         denom = self.ps.friction_diagonal[i][0] * deltaTime
         nom = self.ps.velocity[i] + deltaTime * self.ps.acceleration[i] - deltaTime * self.friction_coef * sum_term 
-        # self.ps.acceleration[i] += nom / denom
+        self.ps.acceleration[i] += nom / denom
 
     @ti.func
     def compute_friction_diagonal(self,i, deltaTime:float):
@@ -422,7 +422,7 @@ class SnowSolver:
             self.compute_lame_parameters(i) ##Don't get what this is doing
             self.compute_correction_matrix(i) #Step 3
             self.compute_accel_ext(i) #Step 4
-            self.compute_accel_friction(i, deltaTime) #Step 5
+            # self.compute_accel_friction(i, deltaTime) #Step 5
             rest_density_sum += self.ps.rest_density[i]
         self.ps.avg_rest_density[0] = rest_density_sum / self.ps.num_particles
 
