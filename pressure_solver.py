@@ -17,7 +17,7 @@ class PressureSolver:
 
     @ti.func
     def vel_div_b(self, i, b, sum:ti.template()):
-        sum += self.ps.boundary_particles_volume[b] * (-self.ps.velocity_star[i]).dot(cubic_kernel_derivative(self.ps.position[i]-self.ps.boundary_particles[b], self.ps.smoothing_radius))
+        sum += self.ps.boundary_particles_volume[b] * (self.ps.boundary_velocity[b]-self.ps.velocity_star[i]).dot(cubic_kernel_derivative(self.ps.position[i]-self.ps.boundary_particles[b], self.ps.smoothing_radius))
 
 
     # consider: https://en.wikipedia.org/wiki/Jacobi_method
@@ -25,13 +25,14 @@ class PressureSolver:
     def compute_A_p(self, i, deltaTime, density_error:ti.template()):
         deltaTime2 = deltaTime * deltaTime
         self.ps.pressure_laplacian[i] = 0.0
+
         lp_i = 0.0
         self.ps.for_all_neighbors(i, self.helper_diff_of_pressure_grad, lp_i)
         lp2 = 0.0
         self.ps.for_all_b_neighbors(i, self.helper_diff_of_pressure_grad_b, lp2)
         self.ps.pressure_laplacian[i] = lp_i + self.m_psi * lp2
         # now compute Ap
-        A_p = -self.ps.rest_density[i] / ti.math.max(self.ps.lambda_t_i[i], self.numerical_eps) * self.ps.pressure[i] + deltaTime2 * lp_i
+        A_p = -self.ps.rest_density[i] / ti.math.max(self.ps.lambda_t_i[i], self.numerical_eps) * self.ps.pressure[i] + deltaTime2 * self.ps.pressure_laplacian[i]
         aii = self.ps.jacobian_diagonal[i]
         residuum = self.ps.rest_density[i] - self.ps.p_star[i] - A_p
         pi = (0.5 / (ti.math.sign(aii) * ti.math.max(ti.abs(aii), self.numerical_eps))) * residuum
@@ -58,11 +59,14 @@ class PressureSolver:
     @ti.func
     def compute_pressure_gradient(self, i):
         self.ps.pressure_gradient[i] = ti.Vector([0.0, 0.0, 0.0])
+
         sum_of_pressures = ti.Vector([0.0, 0.0, 0.0])
         self.ps.for_all_neighbors(i, self.helper_sum_of_pressure, sum_of_pressures)
+
         sum_of_b = ti.Vector([0.0, 0.0, 0.0])
         self.ps.for_all_b_neighbors(i, self.helper_Vb, sum_of_b)
-        self.ps.pressure_gradient[i] = sum_of_pressures + 1.5 * self.ps.pressure[i] * sum_of_b
+
+        self.ps.pressure_gradient[i] = sum_of_pressures + self.m_psi * self.ps.pressure[i] * sum_of_b
 
 
     @ti.func
