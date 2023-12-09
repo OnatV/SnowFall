@@ -4,6 +4,7 @@ import numpy as np
 from taichi.math import vec2, vec3, mat3
 from particle_system import ParticleSystem
 from pressure_solver import PressureSolver
+from elastic_solver import ElasticSolver, solve as solve_elastic
 from kernels import cubic_kernel, cubic_kernel_derivative
 
 @ti.func
@@ -277,6 +278,16 @@ class SnowSolver:
         success = pressure_solver.solve(deltaTime)
         self.compute_a_lambda(success)
 
+    def solve_a_G(self, deltaTime):
+        elastic_solver = ElasticSolver(self.ps, deltaTime)
+        a_G, exit_code = solve_elastic(elastic_solver)
+        if exit_code == 0:
+            a_G = a_G.reshape([self.ps.num_particles, 3])
+            a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
+            a_G_ti.from_numpy(a_G)
+            for i in range(self.ps.num_particles):
+                self.ps.acceleration[i] += a_G_ti[i]
+
     @ti.func
     def aux_correction_matrix(self, i_idx, j_idx, res:ti.template()):
         '''
@@ -523,7 +534,7 @@ class SnowSolver:
             self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-5
             # print("before solve a")
             self.solve_a_lambda(deltaTime) # Step 6
-            # self.solve_a_G()             #Step 7 
+            self.solve_a_G(deltaTime)             #Step 7 
             self.integrate_velocity(deltaTime) # Step 8-9
             self.integrate_deformation_gradient(deltaTime) #Step 10-11
 
