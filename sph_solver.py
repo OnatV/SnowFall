@@ -281,12 +281,14 @@ class SnowSolver:
     def solve_a_G(self, deltaTime):
         elastic_solver = ElasticSolver(self.ps, deltaTime)
         a_G, exit_code = solve_elastic(elastic_solver)
-        if exit_code == 0:
+        if exit_code >= 0:
             a_G = a_G.reshape([self.ps.num_particles, 3])
             a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
-            a_G_ti.from_numpy(a_G)
+            a_G_ti.from_numpy(a_G.astype(np.float32))
             for i in range(self.ps.num_particles):
                 self.ps.acceleration[i] += a_G_ti[i]
+        else:
+            print("BiCGSTAB failed:", exit_code)
 
     @ti.func
     def aux_correction_matrix(self, i_idx, j_idx, res:ti.template()):

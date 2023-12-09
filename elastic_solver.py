@@ -206,7 +206,7 @@ class ElasticSolver:
 # input v is (3 * N, 1), we need to set it to N by 3 (reshape) 
 # and then populate self.basis vector with that information
 def linop(v, es):
-    es.basis_vec.from_numpy(v.reshape([es.ps.num_particles, 3]))
+    es.basis_vec.from_numpy(v.reshape([es.ps.num_particles, 3]).astype(np.float32))
     es.compute_lhs()
     return es.lhs.to_numpy().reshape([3 * es.ps.num_particles,])
 
@@ -214,7 +214,7 @@ def solve(es: ElasticSolver):
     es.compute_rhs()
     b = es.rhs.to_numpy().reshape([3 * es.ps.num_particles,])
     A = LinearOperator(shape=(3 * es.ps.num_particles, 3 * es.ps.num_particles), matvec=lambda x: linop(x, es))
-    return bicgstab(A, b)
+    return bicgstab(A=A, b=b, maxiter=100, tol=1e-3)
     
 
     
