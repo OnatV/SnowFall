@@ -59,15 +59,15 @@ class Logger:
                 dset[:, self.current_step] = data
             if field == 'acceleration':
                 dset = self.file['acceleration']
-                data = self.ps.position.to_numpy().reshape([3 * self.ps.num_particles])
+                data = self.ps.acceleration.to_numpy().reshape([3 * self.ps.num_particles])
                 dset[:, self.current_step] = data
             if field == 'density':
                 dset = self.file['density']
-                data = self.ps.position.to_numpy().reshape([self.ps.num_particles])
+                data = self.ps.density.to_numpy().reshape([self.ps.num_particles])
                 dset[:, self.current_step] = data
             if field == 'rest_density':
                 dset = self.file['rest_density']
-                data = self.ps.position.to_numpy().reshape([self.ps.num_particles])
+                data = self.ps.rest_density.to_numpy().reshape([self.ps.num_particles])
                 dset[:, self.current_step] = data
 
             ## add more fields here similar to above!

@@ -164,6 +164,7 @@ class SnowSolver:
         p_0 = self.ps.init_density
         k = numerator / denom
         self.ps.lambda_t_i[i] = k * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
+        self.ps.G_t_i[i] = (young_mod * nu) / (2 * (1 + nu)) * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
         # if (i[0] == 0):
             # print("self.ps.lambda_t_i[i]", self.ps.lambda_t_i[i])
 
