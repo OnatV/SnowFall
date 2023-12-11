@@ -2,19 +2,27 @@ import numpy as np
 import trimesh
 import taichi as ti
 from trimesh.transformations import rotation_matrix
-from mesh_to_sdf import mesh_to_voxels
+from mesh_to_sdf import mesh_to_voxels, scale_to_unit_cube
 from scipy.interpolate import RegularGridInterpolator
 from time import time_ns
 from numpy.linalg import norm
 from fluid_grid import FluidGrid
 from pathlib import Path
+from trilinear import trilinear_interpolation
+
 ti.init(arch=ti.cpu, debug=True) # cpu, to avoid insane copying
 
 # calculate SDF grid
-mesh_path = Path("boundary/Box_rot.glb")
+# box_path = Path("boundary/Box_rot.glb")
+bmw__path = Path("../bmw_1_series_m_coupe/scene_merged.glb")
+mesh_path = bmw__path
 precomp_path = mesh_path.with_name("precomp_" + mesh_path.name).with_suffix(".npy")
 
 mesh = trimesh.load(mesh_path)
+if type(mesh) is trimesh.Scene: 
+    mesh = mesh.dump()[0]
+mesh = scale_to_unit_cube(mesh)
+
 if not precomp_path.exists():
     voxels, gradients = mesh_to_voxels(mesh, 48, pad=False, return_gradients=True)
     with open(precomp_path, "wb") as wf:
@@ -25,24 +33,23 @@ with open(precomp_path, "rb") as rf:
     voxels = np.load(rf)
     gradients = np.load(rf)
 
-transl = np.array([3, 3, 3])
-
-if type(mesh) is trimesh.Scene: 
-    mesh = mesh.dump()[0]
-mesh.apply_translation(- mesh.bounding_box.centroid)
+transl = np.array([1, 1, 1])
 mesh.apply_translation(transl)
+
 verts = mesh.vertices 
 faces = mesh.faces
 
-voxel_scale =  np.max(mesh.bounding_box.extents) / 2
+voxel_scale = 1.0
 x = np.linspace(-1.0, 1.0, 48) * voxel_scale + transl[0]
 y = np.linspace(-1.0, 1.0, 48) * voxel_scale + transl[1]
 z = np.linspace(-1.0, 1.0, 48) * voxel_scale + transl[2]
-inter_voxels = RegularGridInterpolator((x, y, z), voxels, bounds_error=False, fill_value=None )
-inter_grad   = RegularGridInterpolator((x, y, z), gradients, bounds_error=False, fill_value=None )
+#inter_voxels = RegularGridInterpolator((x, y, z), voxels, bounds_error=False, fill_value=None )
+#inter_grad   = RegularGridInterpolator((x, y, z), gradients, bounds_error=False, fill_value=None )
 
 
-particle_radius = 0.04
+
+#num_layers = 1
+particle_radius = 0.03
 max_particles_per_face = 1524
 
 @ti.func
@@ -67,6 +74,13 @@ def cubic_kernel(r_norm, h):
 @ti.data_oriented
 class Data:
     def __init__(self, mesh_vertices, mesh_faces) -> None:
+        self.voxel_axis = ti.field(float, shape=48)
+        self.voxel_axis.from_numpy(np.linspace(-1.0, 1.0, 48) + transl[0])
+        
+        self.sdf = ti.field(float, shape=voxels.shape)
+        self.sdf.from_numpy(voxels)
+        self.sdf_grad = ti.Vector.field(3, float, shape=gradients.shape[:-1])
+        self.sdf_grad.from_numpy(gradients)
         numFaces = mesh_faces.shape[0]
         self.time_step = 0.1
         self.h = particle_radius * 2.1
@@ -77,7 +91,9 @@ class Data:
         print("grid size:", self.fg.num_cells)
         print("num faces:", numFaces)
         self.particle_nums = np.empty(dtype=int, shape=numFaces)
-        tmp_pos = np.empty(shape=numFaces, dtype=object)
+        tmp_pos = []
+        self.allow_internal_particles = True
+        #self.layer_offsets = np.linspace(0.0, -1.0, num_layers)
         particle_sum = 0
         # here we init particles per face
         for tri_idx in range(numFaces):
@@ -90,9 +106,11 @@ class Data:
             e2 = x2 - x0
 
             # calculate D*A / (pi*r^2)
-            sample_density = 1.5
+            sample_density = 2
             area = norm(np.cross(e1, e2)) / 2.0
-            numParticles = int(sample_density * area / (np.pi * particle_radius**2))
+            numParticles = sample_density * area / (np.pi * particle_radius**2)
+            numParticles = int(numParticles) + \
+                1 if np.random.uniform() < (numParticles - int(numParticles)) else 0
             numParticles = min(numParticles, max_particles_per_face)
             
             pos = np.empty(shape=(numParticles, 3))
@@ -105,7 +123,7 @@ class Data:
                 pos[i] = ti.Vector(x+x0+tri_normal*scale)
             self.particle_nums[tri_idx] = numParticles
             particle_sum += numParticles
-            tmp_pos[tri_idx] = pos
+            tmp_pos.append(pos)
         print()
         print("num particles", particle_sum)
         self.pos = ti.Vector.field(n=3, dtype=float, shape=particle_sum)
@@ -120,15 +138,10 @@ class Data:
             ti.Vector([0.0, 1.0, 1.0]),
         ]
         # write all the positions into a single ti.field
-        offset = 0
-        col_idx = 0
-        for pos_ in tmp_pos:
-            for i in range(pos_.shape[0]):
-                self.pos[offset + i] = pos_[i]
-                self.colors[offset + i] = colors[4]
-            offset += pos_.shape[0]
-            col_idx+=1
+        tmp_pos = np.concatenate(tmp_pos)
+        self.pos.from_numpy(tmp_pos)
         self.fg.update_grid(self.pos)
+        self.color_density()
 
     @ti.kernel
     def update_positions(self):
@@ -151,8 +164,7 @@ class Data:
         for i in ti.grouped(self.vel):
             self.fg.for_all_neighbors(i, self.pos, self.aux_update_velocities, self.vel[i], self.h)
             vel_norm = self.vel[i].normalized(0.0001)
-            if i[0] % 300 == 0:
-                print(i, self.vel[i], vel_norm)
+            
             self.vel[i] = vel_norm * self.h
             #if vr.norm() > self.h * 2:
             #    vr = vr / vr.norm() * self.h * 2
@@ -199,22 +211,25 @@ class Data:
 
     def update_velocity(self):
         self.update_vr()
-        #self.scale_velocity()
-        for i in range(self.pos.shape[0]):
-            x_np = self.pos[i].to_numpy()
+        self.update_vf()
 
-            phi = inter_voxels(x_np)
-            n = inter_grad(x_np).flatten()
+    @ti.kernel
+    def update_vf(self):
+        for i in range(self.pos.shape[0]):
+            p = self.pos[i]
+
+            phi = trilinear_interpolation(self.sdf, self.voxel_axis, self.voxel_axis, self.voxel_axis, p)
+            n = trilinear_interpolation(self.sdf_grad, self.voxel_axis, self.voxel_axis, self.voxel_axis, p)
             # test: make v_r purely parallel to surface
             #tmp = n.dot(self.vel[i])
             #self.vel[i] -= n*tmp
+            if ti.static(self.allow_internal_particles):
+                phi = max(0, phi)
 
             v_f = -phi * n
             self.vel[i] += v_f * 7.0
 
-
 data = Data(verts, faces)
-
 
 vertices = ti.Vector.field(n=3, dtype=float, shape=verts.shape[0])
 vertices.from_numpy(verts)
@@ -224,8 +239,8 @@ indices.from_numpy(faces.flatten())
 window = ti.ui.Window("display", res=(800,800), vsync=True)
 camera = ti.ui.Camera()
 camera.up(0.0, 1.0, 0.0)
-camera.position(0, 0.5+3, 0.5+3)
-camera.lookat(0 + 3,0.5 + 3,0 + 3)
+camera.position(0, 1.5, 0.5)
+camera.lookat(1, 1.5, 1 )
 canvas = window.get_canvas()
 scene = ti.ui.Scene()
 
@@ -256,7 +271,6 @@ while window.running:
         data.update_positions()
         data.fg.update_grid(data.pos)
         data.color_density()
-
         
     scene.particles(data.pos, radius=particle_radius*1.0, per_vertex_color=data.colors)
     canvas.scene(scene)
@@ -267,6 +281,6 @@ while window.running:
 
 output_path = precomp_path.with_name("output_" + mesh_path.name).with_suffix(".npy")
 pos_np = data.pos.to_numpy()
-pos_np -= 3
+pos_np -= transl
 with open(output_path, "wb") as wf:
     np.save(wf, pos_np)
