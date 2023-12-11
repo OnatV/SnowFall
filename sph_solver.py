@@ -4,6 +4,7 @@ import numpy as np
 from taichi.math import vec2, vec3, mat3
 from particle_system import ParticleSystem
 from pressure_solver import PressureSolver
+from adhesion_model import AdhesionModel
 from elastic_solver import ElasticSolver, solve as solve_elastic
 from kernels import cubic_kernel, cubic_kernel_derivative
 
@@ -33,6 +34,8 @@ class SnowSolver:
         # TO DO: COMPUTE ADAPTIVE CORRECTION FACTORR
         self.gamma_1 = ti.field(float, shape=self.ps.num_particles)
         self.gamma_2 = ti.field(float, shape=self.ps.num_particles)
+
+        self.adhesion_model = AdhesionModel(self.ps)
 
     @ti.func
     def helper_sum_kernel(self, i, j, sum:ti.template()):
@@ -358,6 +361,12 @@ class SnowSolver:
             wind_acc += self.ps.wind_direction * self.ps.position[i].dot(self.ps.wind_direction)
 
         self.ps.acceleration[i] = self.ps.gravity + wind_acc
+        self.compute_adhesion(i)
+
+    @ti.func
+    def compute_adhesion(self,i):
+        self.adhesion_model.compute_adhesion_force(i)
+
 
     @ti.func
     def compute_flow(self, i):
@@ -386,7 +395,7 @@ class SnowSolver:
 
         denom = self.ps.friction_diagonal[i][0] * deltaTime
         nom = self.ps.velocity[i] + deltaTime * self.ps.acceleration[i] - deltaTime * self.friction_coef * sum_term 
-        # self.ps.acceleration[i] += nom / denom
+        self.ps.acceleration[i] += nom / denom
 
     @ti.func
     def compute_friction_diagonal(self,i, deltaTime:float):
@@ -433,10 +442,10 @@ class SnowSolver:
         rest_density_sum = 0.0
         for i in ti.grouped(self.ps.position):
             self.compute_rest_density(i) #Step 2
-            self.compute_lame_parameters(i) ##Don't get what this is doing
+            self.compute_lame_parameters(i)  #Section 3.3.2
             self.compute_correction_matrix(i) #Step 3
             self.compute_accel_ext(i) #Step 4
-            self.compute_accel_friction(i, deltaTime) #Step 5
+            # self.compute_accel_friction(i, deltaTime) #Step 5
             rest_density_sum += self.ps.rest_density[i]
         self.ps.avg_rest_density[0] = rest_density_sum / self.ps.num_particles
 
