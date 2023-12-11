@@ -450,7 +450,7 @@ class SnowSolver:
         for i in ti.grouped(self.ps.position):
             
             vel_grad = self.compute_velocity_gradient(i) 
-            un_clamped = self.ps.deformation_gradient[i] + deltaTime * vel_grad * self.ps.deformation_gradient[i]
+            un_clamped = self.ps.deformation_gradient[i] + deltaTime * vel_grad @ self.ps.deformation_gradient[i]
             self.ps.deformation_gradient[i] = self.clamp_deformation_gradients(un_clamped)
 
     @ti.func

@@ -24,7 +24,7 @@ class ParticleSystem:
         self.smoothing_radius = self.cfg.smoothing_radius_ratio * self.particle_radius
         # self.boundary_smoothing_radius = self.boundary_particle_radius * 4.0
         self.wind_direction = ti.Vector(self.cfg.wind_direction)
-        self.enable_wind = False
+        self.enable_wind = True
         self.initialize_type = self.cfg.initialize_type
         self.grid_spacing = self.smoothing_radius * 2
         # self.grid_size= self.cfg.grid_size

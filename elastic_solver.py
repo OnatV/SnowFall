@@ -3,6 +3,8 @@ import numpy as np
 from scipy.sparse.linalg.interface import LinearOperator
 from scipy.sparse.linalg.isolve import bicgstab
 
+# from taichi.linalg import LinearOperator, MatrixFreeBICGSTAB
+
 
 from kernels import cubic_kernel_derivative, cubic_kernel_derivative_corrected
 from particle_system import ParticleSystem
@@ -76,8 +78,15 @@ class ElasticSolver:
     @ti.func 
     def compute_stress_tensor_pred(self, i):
         F_E_pred = self.ps.deformation_gradient[i] + self.deltaTime * self.velocity_pred_grad[i] @ self.ps.deformation_gradient[i]
+        F_E_pred = self.clamp_deformation_gradients(F_E_pred)
         strain = 0.5 * (F_E_pred + F_E_pred.transpose())
         self.stress_tensor_pred[i] = 2 * self.ps.G_t_i[i] * (strain  - ti.Matrix.identity(float, 3))
+
+    @ti.func
+    def clamp_deformation_gradients(self, matrix):
+        U, S, V = ti.svd(matrix)
+        S = ti.math.clamp(S, self.ps.theta_clamp_c, self.ps.theta_clamp_s)
+        return V @ S @ V.transpose() ## This supposedly removes the rotation part
 
     @ti.func
     def compute_stress_pred_div(self, i):
@@ -157,7 +166,7 @@ class ElasticSolver:
         del_w_ij = cubic_kernel_derivative(x_ij, self.ps.smoothing_radius) # del_w_ij: vec3
     
         V_j = self.ps.boundary_particles_volume[j_idx]
-        res += (v_j - v_i).outer_product(V_j * del_w_ij)
+        res += (0.0 - v_i).outer_product(V_j * del_w_ij)
 
     @ti.func 
     def compute_basis_stress_tensor(self, i):
@@ -195,13 +204,23 @@ class ElasticSolver:
 
     @ti.kernel
     def compute_lhs(self):
+        
         for i in ti.grouped(self.ps.position):
             self.basis_grad[i] = self.compute_basis_gradient(i)
         for i in ti.grouped(self.ps.position):
             self.compute_basis_stress_tensor(i)
             self.lhs[i] = self.basis_vec[i] - (self.deltaTime / self.ps.density[i]) * self.compute_basis_stress_div(i)
-    
-# this is the linear operator that scipy will use to solve the Bi-CGSTAB
+
+    @ti.kernel
+    def compute_lhs_linop(self, v:ti.template(), mv:ti.template()):
+        self.basis_vec = v
+        for i in ti.grouped(self.ps.position):
+            self.basis_grad[i] = self.compute_basis_gradient(i, basis_vec)
+        for i in ti.grouped(self.ps.position):
+            self.compute_basis_stress_tensor(i)
+            self.lhs[i] = self.basis_vec[i] - (self.deltaTime / self.ps.density[i]) * self.compute_basis_stress_div(i)
+        mv = self.lhs
+# this is the linear operator that scipy will use to solve with Bi-CGSTAB
 # this function will need to set the basis vector
 # input v is (3 * N, 1), we need to set it to N by 3 (reshape) 
 # and then populate self.basis vector with that information
@@ -210,11 +229,12 @@ def linop(v, es):
     es.compute_lhs()
     return es.lhs.to_numpy().reshape([3 * es.ps.num_particles,])
 
+
 def solve(es: ElasticSolver):
     es.compute_rhs()
     b = es.rhs.to_numpy().reshape([3 * es.ps.num_particles,])
     A = LinearOperator(shape=(3 * es.ps.num_particles, 3 * es.ps.num_particles), matvec=lambda x: linop(x, es))
-    return bicgstab(A=A, b=b, maxiter=100, tol=1e-3)
-    
+    return bicgstab(A=A, b=b, maxiter=100, atol=1e-3, x0=np.zeros(shape=(3 * es.ps.num_particles)))
+    # A = LinearOperator(A=es.compute_lhs_linop, b=es.rhs, quiet=False)
 
     
