@@ -20,20 +20,24 @@ class AdhesionModel:
 
     @ti.func
     def compute_adh_i_b(self, i_idx: ti.template(), b_idx: ti.template(), res : ti.template()):
-        h = 1.0
+        h = 0.03
         V_b = self.ps.boundary_particles_volume[b_idx]
         rest_density = self.ps.rest_density[i_idx] 
         Psi_b = rest_density * V_b
         m_i = self.ps.m_k
 
         x_ib = self.ps.position[i_idx] - self.ps.boundary_particles[b_idx]
-        coeff = self.beta * m_i * Psi_b * adhesion_spline(x_ib.norm(), h)
+        # print("x_ib range:", x_ib)
+        # exit()
+        coeff = self.beta * Psi_b * adhesion_spline(x_ib.norm(), h)
         res -= coeff * x_ib.normalized()
 
     @ti.func
     def compute_adhesion_force(self, i_idx: ti.template()):
         res = ti.Vector([0.0, 0.0, 0.0])
-        self.ps.for_all_b_neighbors(i_idx, self.compute_adh_i_b, res)   
+        self.ps.for_all_b_neighbors(i_idx, self.compute_adh_i_b, res)
+        if i_idx[0] == 0:
+            print("adhesion force:" , res)   
         self.ps.acceleration[i_idx] += res
 
         
