@@ -29,7 +29,7 @@ class PressureSolver:
         self.ps.for_all_neighbors(i, self.helper_diff_of_pressure_grad, lp_i)
         lp2 = 0.0
         self.ps.for_all_b_neighbors(i, self.helper_diff_of_pressure_grad_b, lp2)
-        self.ps.pressure_laplacian[i] = lp_i + self.ps.m_psi * lp2
+        self.ps.pressure_laplacian[i] = lp_i + self.ps.rest_density[i] * lp2
         # now compute Ap
         A_p = -self.ps.rest_density[i] / ti.math.max(self.ps.lambda_t_i[i], self.numerical_eps) * self.ps.pressure[i] + deltaTime2 * self.ps.pressure_laplacian[i]
         aii = self.ps.jacobian_diagonal[i]
@@ -64,8 +64,7 @@ class PressureSolver:
 
         sum_of_b = ti.Vector([0.0, 0.0, 0.0])
         self.ps.for_all_b_neighbors(i, self.helper_Vb, sum_of_b)
-
-        self.ps.pressure_gradient[i] = sum_of_pressures + self.ps.m_psi * self.ps.pressure[i] * sum_of_b
+        self.ps.pressure_gradient[i] = sum_of_pressures + self.ps.rest_density[i] * self.ps.pressure[i] * sum_of_b
 
 
     @ti.func
@@ -130,15 +129,15 @@ class PressureSolver:
         while ( (not is_solved or it < min_iterations) and it < max_iterations):
             it = it + 1
             avg_density_error = self.implicit_pressure_solver_step(deltaTime)
-            print("-----ITERATION", it,"---------")
-            print("avg_density_error", avg_density_error)
-            print("pressure", self.ps.pressure[0])
-            print("rest density", self.ps.rest_density[0])
-            print("density", self.ps.density[0])
-            print("adv density", self.ps.p_star[0])
-            print("pressure_gradient", self.ps.pressure_gradient[0])
-            print("a_lambda", -self.ps.pressure_gradient[0] / self.ps.density[0])
-            print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
+            # print("-----ITERATION", it,"---------")
+            # print("avg_density_error", avg_density_error)
+            # print("pressure", self.ps.pressure[0])
+            # print("rest density", self.ps.rest_density[0])
+            # print("density", self.ps.density[0])
+            # print("adv density", self.ps.p_star[0])
+            # print("pressure_gradient", self.ps.pressure_gradient[0])
+            # print("a_lambda", -self.ps.pressure_gradient[0] / self.ps.density[0])
+            # print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
             if np.isnan(avg_density_error):
                 is_solved = False
                 break
