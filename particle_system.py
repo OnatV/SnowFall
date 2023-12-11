@@ -107,15 +107,16 @@ class ParticleSystem:
 
     def handle_boundary_objects(self):
         pos_tmp = []
+        self.boundary_objects = []
         # offsets to later retrieve the particles of object i
-        self.object_offsets = [] 
+        object_offsets = [] 
         total_num_b_particles = self.num_b_particles
         for path in self.object_paths:
             print("loading boundary object from", path)
             with open(path, "rb") as rf:
                 particle_pos = np.load(rf)
                 pos_tmp.append(particle_pos)
-                self.object_offsets.append(total_num_b_particles)
+                object_offsets.append(total_num_b_particles)
                 total_num_b_particles += particle_pos.shape[0]
         self.boundary_particles = ti.Vector.field(self.dim, dtype=float,  shape=total_num_b_particles)
         self.boundary_velocity = ti.Vector.field(self.dim, dtype=float, shape=total_num_b_particles)
@@ -128,11 +129,22 @@ class ParticleSystem:
             for i in range(src.shape[0]):
                 v = ti.Vector([src[i, 0], src[i, 1], src[i, 2]])
                 dest[offset + i] = v
-        for i in range(len(self.object_offsets)):
-            offset = self.object_offsets[i]
+        for i in range(len(object_offsets)):
+            offset = object_offsets[i]
             obj_pos = pos_tmp[i]
             copy_slice(self.boundary_particles, obj_pos, offset)
+            self.boundary_objects.append(BoundaryObject(offset, obj_pos.shape[0]))
         self.num_b_particles = total_num_b_particles
+
+    def object_control_gui(self):
+        object_idx = 0
+        bobj = self.boundary_objects[object_idx]
+        gui = self.window.get_gui()
+        with gui.sub_window("Boundary Object controls", x=0, y=0, width=0.5, height=1/5):
+            gui.text(f"Object {object_idx}")
+            new_scale = gui.slider_float("Scale", bobj.scale, 0.2, 5.0)
+            bobj.rescale(new_scale, self)
+            self.b_grid.update_grid(self.boundary_particles)
 
     @ti.kernel
     def initialize_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template()):
@@ -284,6 +296,7 @@ class ParticleSystem:
         self.draw_domain()
         self.draw_particles()
         self.canvas.scene(self.scene)
+        self.object_control_gui()
         self.window.show()
 
     def initalize_domain_viz(self):
@@ -322,3 +335,20 @@ class ParticleSystem:
         self.scene.particles(self.boundary_particles, per_vertex_color=self.boundary_colors,
                               radius = self.boundary_particle_radius)
         
+class BoundaryObject:
+    def __init__(self, offset, num_particles) -> None:
+        self.scale = 1.0
+        self.pos = np.zeros(3)
+        self.data_offset = offset
+        self.num_particles = num_particles
+
+    def rescale(self, new_scale, ps:ParticleSystem):
+        @ti.kernel
+        def multiply_slice(dest:ti.template(), offset:int, length:int, factor:float):
+            for i in range(length):
+                dest[offset + i] *= factor
+        ratio = new_scale / self.scale
+        multiply_slice(ps.boundary_particles, self.data_offset,
+            self.num_particles, ratio)
+        self.scale = new_scale
+    

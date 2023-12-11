@@ -267,5 +267,6 @@ while window.running:
 
 output_path = precomp_path.with_name("output_" + mesh_path.name).with_suffix(".npy")
 pos_np = data.pos.to_numpy()
+pos_np -= 3
 with open(output_path, "wb") as wf:
     np.save(wf, pos_np)

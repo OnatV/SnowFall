@@ -3,6 +3,6 @@ taichi
 configparser
 h5py
 argparse
-mesh_to_sdf
+mesh-to-sdf
 scipy
 trimesh
