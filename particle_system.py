@@ -141,10 +141,24 @@ class ParticleSystem:
         bobj = self.boundary_objects[object_idx]
         gui = self.window.get_gui()
         with gui.sub_window("Boundary Object controls", x=0, y=0, width=0.5, height=1/5):
+            any_update = False
             gui.text(f"Object {object_idx}")
             new_scale = gui.slider_float("Scale", bobj.scale, 0.2, 5.0)
-            bobj.rescale(new_scale, self)
-            self.b_grid.update_grid(self.boundary_particles)
+            if new_scale != bobj.scale:
+                bobj.rescale(new_scale, self)
+                any_update = True
+            old_x = bobj.pos[0]
+            old_y = bobj.pos[1]
+            old_z = bobj.pos[2]
+            new_x = gui.slider_float("Position X", old_x, -3.0, 3.0)
+            new_y = gui.slider_float("Position Y", old_y, -3.0, 3.0)
+            new_z = gui.slider_float("Position Z", old_z, -3.0, 3.0)
+            new_pos = np.array([new_x, new_y, new_z], float)
+            if (new_pos != bobj.pos).any():
+                bobj.translate(new_pos, self)
+                any_update = True
+            if any_update:
+                self.b_grid.update_grid(self.boundary_particles)
 
     @ti.kernel
     def initialize_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template()):
@@ -352,3 +366,11 @@ class BoundaryObject:
             self.num_particles, ratio)
         self.scale = new_scale
     
+    def translate(self, new_pos, ps:ParticleSystem):
+        @ti.kernel
+        def add_slice(dest:ti.template(), offset:int, length:int, value:ti.types.vector(3, float)):
+            for i in range(length):
+                dest[offset + i] += value
+        diff = ti.Vector(new_pos - self.pos)
+        add_slice(ps.boundary_particles, self.data_offset, self.num_particles, diff)
+        self.pos = new_pos
