@@ -22,8 +22,8 @@ class AdhesionModel:
     def compute_adh_i_b(self, i_idx: ti.template(), b_idx: ti.template(), res : ti.template()):
         h = 1.0
         V_b = self.ps.boundary_particles_volume[b_idx]
-        rest_density_b = 4000
-        Psi_b = rest_density_b * V_b
+        rest_density = self.ps.rest_density[i_idx] 
+        Psi_b = rest_density * V_b
         m_i = self.ps.m_k
 
         x_ib = self.ps.position[i_idx] - self.ps.boundary_particles[b_idx]
