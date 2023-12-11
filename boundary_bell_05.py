@@ -1,6 +1,5 @@
 import numpy as np
 import trimesh
-import matplotlib.pyplot as plt
 import taichi as ti
 from trimesh.transformations import rotation_matrix
 from mesh_to_sdf import mesh_to_voxels
@@ -236,6 +235,8 @@ iteration = 0
 while window.running:
     if window.is_pressed(ti.ui.SPACE, ' '): particle_sim = True
     if window.is_pressed(ti.ui.ALT): particle_sim = False
+    if window.is_pressed(ti.ui.BACKSPACE):
+        window.running = False
     # if window.is_pressed(ti.ui.UP):
     #     data.pos[0].x += 0.05
     # if window.is_pressed(ti.ui.DOWN):
@@ -263,3 +264,8 @@ while window.running:
     window.show()
     data.time_step = 0.18 / (iteration + 1) ** 0.2
     iteration = min(iteration+1, 100)
+
+output_path = precomp_path.with_name("output_" + mesh_path.name).with_suffix(".npy")
+pos_np = data.pos.to_numpy()
+with open(output_path, "wb") as wf:
+    np.save(wf, pos_np)

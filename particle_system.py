@@ -4,6 +4,7 @@ import configparser
 
 from snow_config import SnowConfig
 from fluid_grid import FluidGrid
+
 @ti.data_oriented
 class ParticleSystem:
     def __init__(self, config: SnowConfig, GGUI = True):
@@ -34,9 +35,12 @@ class ParticleSystem:
         self.friction_coef = self.cfg.friction
         self.m_psi = self.cfg.m_psi
 
+        self.object_paths = self.cfg.object_paths
+
         # allocate memory
         self.allocate_fields()
         self.initialize_fields()
+        
         print("Creating Grid")
         self.update_grid()
         self.update_boundary_grid()
@@ -84,13 +88,8 @@ class ParticleSystem:
 
         self.padding = 0.1 * self.grid_spacing
         # self.boundary_particle_spacing = self.boundary_particle_radius # important quantity for figuring out boundary volume
-        # boundary particles
-        self.boundary_particles = ti.Vector.field(self.dim, dtype=float,  shape=self.num_b_particles)
-        self.boundary_velocity = ti.Vector.field(self.dim, dtype=float, shape=self.num_b_particles)
-
-        self.boundary_particles_volume = ti.field(float,  shape=self.num_b_particles)
-        self.boundary_colors = ti.Vector.field(self.dim, dtype=float, shape=self.num_b_particles)
         
+        self.handle_boundary_objects()
         
         self.velocity_star = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles) #@@
 
@@ -105,6 +104,35 @@ class ParticleSystem:
             [0, 0, 1 + self.cfg.theta_s]
         ])
         self.colors = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+
+    def handle_boundary_objects(self):
+        pos_tmp = []
+        # offsets to later retrieve the particles of object i
+        self.object_offsets = [] 
+        total_num_b_particles = self.num_b_particles
+        for path in self.object_paths:
+            print("loading boundary object from", path)
+            with open(path, "rb") as rf:
+                particle_pos = np.load(rf)
+                pos_tmp.append(particle_pos)
+                self.object_offsets.append(total_num_b_particles)
+                total_num_b_particles += particle_pos.shape[0]
+        self.boundary_particles = ti.Vector.field(self.dim, dtype=float,  shape=total_num_b_particles)
+        self.boundary_velocity = ti.Vector.field(self.dim, dtype=float, shape=total_num_b_particles)
+
+        self.boundary_particles_volume = ti.field(float,  shape=total_num_b_particles)
+        self.boundary_colors = ti.Vector.field(self.dim, dtype=float, shape=total_num_b_particles)
+        # next, load the positions into the ti field
+        @ti.kernel
+        def copy_slice(dest:ti.template(), src:ti.types.ndarray(), offset:int):
+            for i in range(src.shape[0]):
+                v = ti.Vector([src[i, 0], src[i, 1], src[i, 2]])
+                dest[offset + i] = v
+        for i in range(len(self.object_offsets)):
+            offset = self.object_offsets[i]
+            obj_pos = pos_tmp[i]
+            copy_slice(self.boundary_particles, obj_pos, offset)
+        self.num_b_particles = total_num_b_particles
 
     @ti.kernel
     def initialize_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template()):
@@ -176,6 +204,8 @@ class ParticleSystem:
             block_origin = ti.field(float, 3)
             block_origin.from_numpy(self.cfg.block_origin)
             self.initialize_particle_block(self.cfg.block_length, self.cfg.block_height, self.cfg.block_width, block_origin)
+        elif self.initialize_type == 'box_test':
+            pass
         else:
             self.initialize_random_particles()
         self.fluid_grid.update_grid(self.position)
@@ -196,7 +226,6 @@ class ParticleSystem:
         self.boundary_velocity_initialize()
         self.gradient_initialize()
         print("Intialized!")
-
 
     def update_grid(self):
         for i in range(self.num_particles):
@@ -292,4 +321,4 @@ class ParticleSystem:
         self.scene.particles(self.position, color = (0.99, 0.99, 0.99), radius = self.particle_radius, per_vertex_color=self.colors)
         self.scene.particles(self.boundary_particles, per_vertex_color=self.boundary_colors,
                               radius = self.boundary_particle_radius)
-
+        
