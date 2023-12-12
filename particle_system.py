@@ -89,7 +89,7 @@ class ParticleSystem:
         self.padding = 0.1 * self.grid_spacing
         # self.boundary_particle_spacing = self.boundary_particle_radius # important quantity for figuring out boundary volume
         
-        self.handle_boundary_objects()
+        self.import_boundary_objects()
         
         self.velocity_star = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles) #@@
 
@@ -105,7 +105,7 @@ class ParticleSystem:
         ])
         self.colors = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
 
-    def handle_boundary_objects(self):
+    def import_boundary_objects(self):
         pos_tmp = []
         self.boundary_objects = []
         # offsets to later retrieve the particles of object i
