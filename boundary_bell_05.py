@@ -7,6 +7,7 @@ from scipy.interpolate import RegularGridInterpolator
 from time import time_ns
 from numpy.linalg import norm
 from fluid_grid import FluidGrid
+from kernels import cubic_kernel
 from pathlib import Path
 from trilinear import trilinear_interpolation
 
@@ -52,23 +53,23 @@ z = np.linspace(-1.0, 1.0, 48) * voxel_scale + transl[2]
 particle_radius = 0.04
 max_particles_per_face = 1524
 
-@ti.func
-def cubic_kernel(r_norm, h):
-    # implementation details borrowed from SPH_Taichi
-    # use ps.smoothing_radius to calculate the kernel weight of particles
-    # for now, sum over nearby particles
-    w = ti.cast(0.0, ti.f32)
-    k = 8 / np.pi
-    k /= ti.pow(h, 3)
-    q = r_norm / h
-    if q <= 1.0:
-        if q <= 0.5:
-            q2 = ti.pow(q, 2)
-            q3 = ti.pow(q, 3)
-            w = k * (6.0 * q3 - 6.0 * q2 + 1)
-        else:
-            w = k * 2 * ti.pow(1 - q, 3.0)
-    return w
+# @ti.func
+# def cubic_kernel(r_norm, h):
+#     # implementation details borrowed from SPH_Taichi
+#     # use ps.smoothing_radius to calculate the kernel weight of particles
+#     # for now, sum over nearby particles
+#     w = ti.cast(0.0, ti.f32)
+#     k = 8 / np.pi
+#     k /= ti.pow(h, 3)
+#     q = r_norm / h
+#     if q <= 1.0:
+#         if q <= 0.5:
+#             q2 = ti.pow(q, 2)
+#             q3 = ti.pow(q, 3)
+#             w = k * (6.0 * q3 - 6.0 * q2 + 1)
+#         else:
+#             w = k * 2 * ti.pow(1 - q, 3.0)
+#     return w
 
 # a class to hold all the sim data
 @ti.data_oriented

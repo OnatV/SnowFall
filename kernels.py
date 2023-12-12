@@ -38,3 +38,22 @@ def cubic_kernel_derivative(r, h) -> ti.Vector:
             f = 1.0 - q
             d_w = l * (-f * f) * grad_q
     return d_w
+
+@ti.func    
+def cubic_kernel_derivative_corrected(r, h, L) -> ti.Vector:
+    # use ps.smoothing_radius to calculate the derivative of kernel weight of particles
+    # for now, sum over nearby particles
+    k = 8.0 / np.pi
+    k = 6.0 * k / ti.pow(h, 3)
+    l = 48.0 / np.pi
+    r_norm = r.norm()
+    q = r_norm / h
+    d_w = ti.Vector([0.0, 0.0, 0.0])
+    if r_norm > 1e-5 and q <= 1.0:
+        grad_q = r / (r_norm * h)
+        if q < 0.5:
+            d_w = l * q * (3.0 * q - 2.0) * grad_q
+        else:
+            f = 1.0 - q
+            d_w = l * (-f * f) * grad_q
+    return L @ d_w
