@@ -4,6 +4,7 @@ import configparser
 
 from snow_config import SnowConfig
 from fluid_grid import FluidGrid
+
 @ti.data_oriented
 class ParticleSystem:
     def __init__(self, config: SnowConfig, GGUI = True):
@@ -34,9 +35,12 @@ class ParticleSystem:
         self.friction_coef = self.cfg.friction
         self.m_psi = self.cfg.m_psi
 
+        self.object_paths = self.cfg.object_paths
+
         # allocate memory
         self.allocate_fields()
         self.initialize_fields()
+        
         print("Creating Grid")
         self.update_grid()
         self.update_boundary_grid()
@@ -84,13 +88,8 @@ class ParticleSystem:
 
         self.padding = 0.1 * self.grid_spacing
         # self.boundary_particle_spacing = self.boundary_particle_radius # important quantity for figuring out boundary volume
-        # boundary particles
-        self.boundary_particles = ti.Vector.field(self.dim, dtype=float,  shape=self.num_b_particles)
-        self.boundary_velocity = ti.Vector.field(self.dim, dtype=float, shape=self.num_b_particles)
-
-        self.boundary_particles_volume = ti.field(float,  shape=self.num_b_particles)
-        self.boundary_colors = ti.Vector.field(self.dim, dtype=float, shape=self.num_b_particles)
         
+        self.handle_boundary_objects()
         
         self.velocity_star = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles) #@@
 
@@ -105,6 +104,61 @@ class ParticleSystem:
             [0, 0, 1 + self.cfg.theta_s]
         ])
         self.colors = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
+
+    def handle_boundary_objects(self):
+        pos_tmp = []
+        self.boundary_objects = []
+        # offsets to later retrieve the particles of object i
+        object_offsets = [] 
+        total_num_b_particles = self.num_b_particles
+        for path in self.object_paths:
+            print("loading boundary object from", path)
+            with open(path, "rb") as rf:
+                particle_pos = np.load(rf)
+                pos_tmp.append(particle_pos)
+                object_offsets.append(total_num_b_particles)
+                total_num_b_particles += particle_pos.shape[0]
+        self.boundary_particles = ti.Vector.field(self.dim, dtype=float,  shape=total_num_b_particles)
+        self.boundary_velocity = ti.Vector.field(self.dim, dtype=float, shape=total_num_b_particles)
+
+        self.boundary_particles_volume = ti.field(float,  shape=total_num_b_particles)
+        self.boundary_colors = ti.Vector.field(self.dim, dtype=float, shape=total_num_b_particles)
+        # next, load the positions into the ti field
+        @ti.kernel
+        def copy_slice(dest:ti.template(), src:ti.types.ndarray(), offset:int):
+            for i in range(src.shape[0]):
+                v = ti.Vector([src[i, 0], src[i, 1], src[i, 2]])
+                dest[offset + i] = v
+        for i in range(len(object_offsets)):
+            offset = object_offsets[i]
+            obj_pos = pos_tmp[i]
+            copy_slice(self.boundary_particles, obj_pos, offset)
+            self.boundary_objects.append(BoundaryObject(offset, obj_pos.shape[0]))
+        self.num_b_particles = total_num_b_particles
+
+    def object_control_gui(self):
+        object_idx = 0
+        bobj = self.boundary_objects[object_idx]
+        gui = self.window.get_gui()
+        with gui.sub_window("Boundary Object controls", x=0, y=0, width=0.5, height=1/5):
+            any_update = False
+            gui.text(f"Object {object_idx}")
+            new_scale = gui.slider_float("Scale", bobj.scale, 0.2, 5.0)
+            if new_scale != bobj.scale:
+                bobj.rescale(new_scale, self)
+                any_update = True
+            old_x = bobj.pos[0]
+            old_y = bobj.pos[1]
+            old_z = bobj.pos[2]
+            new_x = gui.slider_float("Position X", old_x, -3.0, 3.0)
+            new_y = gui.slider_float("Position Y", old_y, -3.0, 3.0)
+            new_z = gui.slider_float("Position Z", old_z, -3.0, 3.0)
+            new_pos = np.array([new_x, new_y, new_z], float)
+            if (new_pos != bobj.pos).any():
+                bobj.translate(new_pos, self)
+                any_update = True
+            if any_update:
+                self.b_grid.update_grid(self.boundary_particles)
 
     @ti.kernel
     def initialize_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template()):
@@ -176,6 +230,8 @@ class ParticleSystem:
             block_origin = ti.field(float, 3)
             block_origin.from_numpy(self.cfg.block_origin)
             self.initialize_particle_block(self.cfg.block_length, self.cfg.block_height, self.cfg.block_width, block_origin)
+        elif self.initialize_type == 'box_test':
+            pass
         else:
             self.initialize_random_particles()
         self.fluid_grid.update_grid(self.position)
@@ -196,7 +252,6 @@ class ParticleSystem:
         self.boundary_velocity_initialize()
         self.gradient_initialize()
         print("Intialized!")
-
 
     def update_grid(self):
         for i in range(self.num_particles):
@@ -255,6 +310,7 @@ class ParticleSystem:
         self.draw_domain()
         self.draw_particles()
         self.canvas.scene(self.scene)
+        self.object_control_gui()
         self.window.show()
 
     def initalize_domain_viz(self):
@@ -292,4 +348,29 @@ class ParticleSystem:
         self.scene.particles(self.position, color = (0.99, 0.99, 0.99), radius = self.particle_radius, per_vertex_color=self.colors)
         self.scene.particles(self.boundary_particles, per_vertex_color=self.boundary_colors,
                               radius = self.boundary_particle_radius)
+        
+class BoundaryObject:
+    def __init__(self, offset, num_particles) -> None:
+        self.scale = 1.0
+        self.pos = np.zeros(3)
+        self.data_offset = offset
+        self.num_particles = num_particles
 
+    def rescale(self, new_scale, ps:ParticleSystem):
+        @ti.kernel
+        def multiply_slice(dest:ti.template(), offset:int, length:int, factor:float):
+            for i in range(length):
+                dest[offset + i] *= factor
+        ratio = new_scale / self.scale
+        multiply_slice(ps.boundary_particles, self.data_offset,
+            self.num_particles, ratio)
+        self.scale = new_scale
+    
+    def translate(self, new_pos, ps:ParticleSystem):
+        @ti.kernel
+        def add_slice(dest:ti.template(), offset:int, length:int, value:ti.types.vector(3, float)):
+            for i in range(length):
+                dest[offset + i] += value
+        diff = ti.Vector(new_pos - self.pos)
+        add_slice(ps.boundary_particles, self.data_offset, self.num_particles, diff)
+        self.pos = new_pos

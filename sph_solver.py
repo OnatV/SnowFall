@@ -309,7 +309,7 @@ class SnowSolver:
         '''
             Helper of self.compute_correction_matrix for boundary particles
         '''
-        x_ib = self.ps.position[i_idx] - self.ps.boundary_particles[b_idx] # x_ij: vec3
+        x_ib = self.ps.position[i_idx] - self.ps.boundary_particles[b_idx] # x_ib: vec3
         w_ib = cubic_kernel_derivative(x_ib, self.ps.smoothing_radius)
         V_b =  self.ps.boundary_particles_volume[b_idx]
 
@@ -322,13 +322,10 @@ class SnowSolver:
 
             Computes L_i as defined in the paper. 
             
-            If os.is_pseudo_L_i[i] is true, 
-                use L_i = pseudo_correction_matrix[i]
-            else
-                use L_i = correction_matrix[i]
+            if A_i cannot be computed, the pseudo inverse
+            is given by (A^T @ A)^1.
+            L_i is then Pseudo_i @ A^T_i (L_i can be directly used)
         '''
-        x_i = self.ps.position[i]
-        self.ps.is_pseudo_L_i[i] = False
         tmp_i = ti.Matrix.zero(dt=float, n=3, m=3)
         self.ps.for_all_neighbors(i, self.aux_correction_matrix, tmp_i)
         self.ps.for_all_b_neighbors(i, self.aux_correction_matrix_b, tmp_i)
@@ -338,14 +335,9 @@ class SnowSolver:
             self.ps.correction_matrix[i] = tmp_i.inverse()
         else: # no inverse 
               # hence use the peudoinverse
-              # other code can use is_pseudo property
-              # if true, the kernel_grad Wij must be transformed to 
-              # tmp_i.transpose() * W_ij, and then
-              # ~grad = pseudo_inv * tmp_i.transpose() * W_ij
             pseudo = (tmp_i.transpose() * tmp_i).inverse()
-            self.ps.pseudo_correction_matrix[i] = pseudo
-            self.ps.correction_matrix[i] = tmp_i
-            self.ps.is_pseudo_L_i[i] = True
+            self.ps.correction_matrix[i] = pseudo * tmp_i.transpose()
+            
 
     @ti.func
     def compute_accel_ext(self, i):
@@ -474,8 +466,8 @@ class SnowSolver:
         self.ps.for_all_b_neighbors(i, self.helper_compute_velocity_gradient_b_uncorrected, grad_v_i_b_prime)
 
         L_i = self.ps.correction_matrix[i]
-        if self.ps.is_pseudo_L_i[i]:
-            L_i = self.ps.pseudo_correction_matrix[i]
+        #if self.ps.is_pseudo_L_i[i]:
+        #    L_i = self.ps.pseudo_correction_matrix[i]
         # if(i[0] == 0):
         #     print("---LI---", L_i)
         ##In the Paragraph between Eq17 and Eq18
