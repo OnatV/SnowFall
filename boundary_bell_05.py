@@ -13,9 +13,9 @@ from trilinear import trilinear_interpolation
 ti.init(arch=ti.cpu, debug=True) # cpu, to avoid insane copying
 
 # calculate SDF grid
-# box_path = Path("boundary/Box_rot.glb")
-bmw__path = Path("../bmw_1_series_m_coupe/scene_merged.glb")
-mesh_path = bmw__path
+box_path = Path("boundary/Box_rot.glb")
+#bmw__path = Path("../bmw_1_series_m_coupe/scene_merged.glb")
+mesh_path = box_path
 precomp_path = mesh_path.with_name("precomp_" + mesh_path.name).with_suffix(".npy")
 
 mesh = trimesh.load(mesh_path)
@@ -33,7 +33,7 @@ with open(precomp_path, "rb") as rf:
     voxels = np.load(rf)
     gradients = np.load(rf)
 
-transl = np.array([1, 1, 1])
+transl = np.array([1, 1, 1]) * 2
 mesh.apply_translation(transl)
 
 verts = mesh.vertices 
@@ -49,7 +49,7 @@ z = np.linspace(-1.0, 1.0, 48) * voxel_scale + transl[2]
 
 
 #num_layers = 1
-particle_radius = 0.03
+particle_radius = 0.04
 max_particles_per_face = 1524
 
 @ti.func
@@ -106,21 +106,19 @@ class Data:
             e2 = x2 - x0
 
             # calculate D*A / (pi*r^2)
-            sample_density = 2
+            sample_density = 1.7
             area = norm(np.cross(e1, e2)) / 2.0
             numParticles = sample_density * area / (np.pi * particle_radius**2)
             numParticles = int(numParticles) + \
-                1 if np.random.uniform() < (numParticles - int(numParticles)) else 0
+                (1 if np.random.uniform() < (numParticles - int(numParticles)) else 0)
             numParticles = min(numParticles, max_particles_per_face)
-            
-            pos = np.empty(shape=(numParticles, 3))
+            pos = np.empty(shape=(numParticles, 3), dtype=np.float32)
 
             rand = np.random.uniform(size= 2 * numParticles).reshape((numParticles, 2))
-            tri_normal = np.cross(e1, e2)
+            
             for i in range(numParticles):
-                scale = np.random.random()*0.2
                 x = e1 * rand[i][0] + (1-rand[i][0])*rand[i][1]*e2
-                pos[i] = ti.Vector(x+x0+tri_normal*scale)
+                pos[i] = ti.Vector(x+x0)
             self.particle_nums[tri_idx] = numParticles
             particle_sum += numParticles
             tmp_pos.append(pos)
