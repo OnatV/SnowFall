@@ -15,7 +15,7 @@ ti.init(arch=ti.cpu, debug=True) # cpu, to avoid insane copying
 
 # calculate SDF grid
 # box_path = Path("boundary/Box_rot.glb")
-bmw__path = Path("../bmw_1_series_m_coupe/scene_merged.glb")
+bmw__path = Path("boundary/bunny.ply")
 mesh_path = bmw__path
 precomp_path = mesh_path.with_name("precomp_" + mesh_path.name).with_suffix(".npy")
 
@@ -50,7 +50,7 @@ z = np.linspace(-1.0, 1.0, 48) * voxel_scale + transl[2]
 
 
 #num_layers = 1
-particle_radius = 0.03
+particle_radius = 0.01
 max_particles_per_face = 1524
 
 # @ti.func
@@ -93,7 +93,7 @@ class Data:
         print("num faces:", numFaces)
         self.particle_nums = np.empty(dtype=int, shape=numFaces)
         tmp_pos = []
-        self.allow_internal_particles = True
+        self.allow_internal_particles = False
         #self.layer_offsets = np.linspace(0.0, -1.0, num_layers)
         particle_sum = 0
         # here we init particles per face
@@ -107,7 +107,7 @@ class Data:
             e2 = x2 - x0
 
             # calculate D*A / (pi*r^2)
-            sample_density = 2
+            sample_density = 10
             area = norm(np.cross(e1, e2)) / 2.0
             numParticles = sample_density * area / (np.pi * particle_radius**2)
             numParticles = int(numParticles) + \
@@ -228,7 +228,7 @@ class Data:
                 phi = max(0, phi)
 
             v_f = -phi * n
-            self.vel[i] += v_f * 7.0
+            self.vel[i] += v_f * 100.0
 
 data = Data(verts, faces)
 
@@ -273,7 +273,7 @@ while window.running:
         data.fg.update_grid(data.pos)
         data.color_density()
         
-    scene.particles(data.pos, radius=particle_radius*1.0, per_vertex_color=data.colors)
+    scene.particles(data.pos, radius=particle_radius*0.4, per_vertex_color=data.colors)
     canvas.scene(scene)
 
     window.show()
