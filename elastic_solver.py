@@ -9,7 +9,7 @@ from particle_system import ParticleSystem
 
 @ti.data_oriented
 class ElasticSolver:
-    def __init__(self, ps:ParticleSystem, dt):
+    def __init__(self, ps:ParticleSystem):
         self.ps = ps
         self.velocity_pred = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
         self.basis_vec = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
@@ -20,7 +20,7 @@ class ElasticSolver:
         self.lhs = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
         self.stress_tensor_pred = ti.Matrix.field(m=self.ps.dim, n=self.ps.dim, dtype=float, shape=self.ps.num_particles)
         self.basis_stress_tensor = ti.Matrix.field(m=self.ps.dim, n=self.ps.dim, dtype=float, shape=self.ps.num_particles)
-        self.deltaTime = dt
+        self.deltaTime = 0.1
 
     @ti.func
     def get_volume(self, i):
@@ -210,7 +210,8 @@ def linop(v, es):
     es.compute_lhs()
     return es.lhs.to_numpy().reshape([3 * es.ps.num_particles,])
 
-def solve(es: ElasticSolver):
+def solve(es: ElasticSolver, dt:float):
+    es.deltaTime = dt
     es.compute_rhs()
     b = es.rhs.to_numpy().reshape([3 * es.ps.num_particles,])
     A = LinearOperator(shape=(3 * es.ps.num_particles, 3 * es.ps.num_particles), matvec=lambda x: linop(x, es))

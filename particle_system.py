@@ -2,6 +2,7 @@ import taichi as ti
 import numpy as np
 import configparser
 
+from time import time_ns
 from snow_config import SnowConfig
 from fluid_grid import FluidGrid
 
@@ -253,11 +254,14 @@ class ParticleSystem:
         self.gradient_initialize()
         print("Intialized!")
 
-    def update_grid(self):
+    @ti.kernel
+    def color_reset(self):
         for i in range(self.num_particles):
             self.colors[i] = ti.Vector([1.0, 1.0, 1.0])
         for i in range(self.num_b_particles):
             self.boundary_colors[i] = ti.Vector([0.4, 0.4, 0.4])
+    def update_grid(self):
+        self.color_reset()
         self.fluid_grid.update_grid(self.position)
 
     @ti.func
@@ -302,6 +306,7 @@ class ParticleSystem:
         '''
         position = self.position[i]
         self.b_grid.for_all_b_neighbors(i, position, self.boundary_particles, func, ret, self.smoothing_radius)
+        
 
     def visualize(self):
         self.camera.track_user_inputs(self.window, movement_speed=0.03, hold_key=ti.ui.RMB)

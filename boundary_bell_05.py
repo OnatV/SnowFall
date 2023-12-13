@@ -5,6 +5,7 @@ from trimesh.transformations import rotation_matrix
 from mesh_to_sdf import mesh_to_voxels, scale_to_unit_cube
 from scipy.interpolate import RegularGridInterpolator
 from time import time_ns
+from contextlib import redirect_stdout
 from numpy.linalg import norm
 from fluid_grid import FluidGrid
 from kernels import cubic_kernel
@@ -160,6 +161,7 @@ class Data:
     def update_vr(self): # V_r part
         for i in ti.grouped(self.vel):
             self.vel[i] = [0,0,0]
+        
         for i in ti.grouped(self.vel):
             self.fg.for_all_neighbors(i, self.pos, self.aux_update_velocities, self.vel[i], self.h)
             vel_norm = self.vel[i].normalized(0.0001)
@@ -167,6 +169,8 @@ class Data:
             self.vel[i] = vel_norm * self.h
             #if vr.norm() > self.h * 2:
             #    vr = vr / vr.norm() * self.h * 2
+        
+        
             
     @ti.func
     def max_velocity(self) -> float:
@@ -265,8 +269,13 @@ while window.running:
     scene.mesh(vertices=vertices, indices=indices ,color=(1.0,0.0,0.0), show_wireframe=True)
     #data.color_reset()
     #data.neigh_color(0)
-    if particle_sim:    
+    if particle_sim:   
+        #ti.profiler.clear_kernel_profiler_info()
+        
+        ta = time_ns() 
         data.update_velocity()
+        te = time_ns()
+        #print(f"\rvel step: {(te - ta) / 1e6} ms", end="")
         data.update_positions()
         data.fg.update_grid(data.pos)
         data.color_density()
