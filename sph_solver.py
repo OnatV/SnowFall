@@ -379,23 +379,42 @@ class SnowSolver:
         '''
         x_ib = self.ps.position[i_idx] - self.ps.boundary_particles[b_idx]
         grad_kernel_ib = cubic_kernel_derivative(
-            self.ps.position[i_idx] - self.ps.boundary_particles[b_idx], self.ps.smoothing_radius
+            x_ib, self.ps.smoothing_radius
         )
        
-        sum += self.ps.boundary_particles_volume[b_idx] * x_ib.dot(grad_kernel_ib) * self.ps.boundary_velocity[b_idx] / (x_ib.norm_sqr() + 0.01 * self.h * self.h)
+        friction_val = self.ps.boundary_particles_volume[b_idx] * x_ib.dot(grad_kernel_ib) * self.ps.boundary_velocity[b_idx] / (x_ib.norm_sqr() + 0.01 * self.h * self.h)
+        sum += friction_val
+
+    @ti.func
+    def count_neighbours(self, i:ti.template(), n_idx, res : ti.template()):
+        res += 1.
 
     @ti.func
     def compute_accel_friction(self, i, deltaTime:float):
         '''
             Computes Step 5 in Algorithm 1 in the paper.
         '''
-        self.compute_friction_diagonal(i, deltaTime)
-        sum_term = ti.Vector([0.0, 0.0, 0.0], dt = float)
-        self.ps.for_all_b_neighbors(i, self.helper_compute_accel_friction, sum_term)
+        accel_friciton = ti.Vector([0.0, 0.0, 0.0], dt = float)
+        n_count = 0.
+        self.ps.for_all_b_neighbors(i, self.count_neighbours, n_count)
+        if n_count > 0:
 
-        denom = self.ps.friction_diagonal[i][0] * deltaTime
-        nom = self.ps.velocity[i] + deltaTime * self.ps.acceleration[i] - deltaTime * self.friction_coef * sum_term 
-        self.ps.acceleration[i] += nom / denom
+            self.compute_friction_diagonal(i, deltaTime)
+            sum_term = ti.Vector([0.0, 0.0, 0.0], dt = float)
+            self.ps.for_all_b_neighbors(i, self.helper_compute_accel_friction, sum_term)
+            
+            denom = self.ps.friction_diagonal[i][0] # * deltaTime
+            nom = self.ps.velocity[i] + deltaTime * self.ps.acceleration[i] - deltaTime * self.friction_coef * sum_term 
+            accel_friciton =  nom / ti.max(denom, self.numerical_eps)
+            
+            if i[0] == 0:
+                print("NOm term in accel friction", nom, "vel", self.ps.velocity[i], "accel", self.ps.acceleration[i])
+                print('denom term in accel friction', denom, "diag", self.ps.friction_diagonal[i][0])
+                print("sum term in accel friction", sum_term)
+
+        if i[0] == 0:
+            print("accel_friciton", accel_friciton)
+        self.ps.acceleration[i] += accel_friciton
 
     @ti.func
     def compute_friction_diagonal(self,i, deltaTime:float):
@@ -405,7 +424,8 @@ class SnowSolver:
         '''
         sum_term = 0.0
         self.ps.for_all_b_neighbors(i, self.helper_compute_friction_diagonal, sum_term)
-        self.ps.friction_diagonal[i] = 1 - deltaTime * self.friction_coef * sum_term
+        # self.ps.friction_diagonal[i] = 1 - deltaTime * self.friction_coef * sum_term
+        self.ps.friction_diagonal[i] = 1 - self.friction_coef * sum_term
 
     @ti.func
     def helper_compute_friction_diagonal(self, i_idx, b_idx, sum:ti.template()):
@@ -445,7 +465,7 @@ class SnowSolver:
             self.compute_lame_parameters(i)  #Section 3.3.2
             self.compute_correction_matrix(i) #Step 3
             self.compute_accel_ext(i) #Step 4
-            # self.compute_accel_friction(i, deltaTime) #Step 5
+            self.compute_accel_friction(i, deltaTime) #Step 5
             rest_density_sum += self.ps.rest_density[i]
         self.ps.avg_rest_density[0] = rest_density_sum / self.ps.num_particles
 
@@ -545,7 +565,7 @@ class SnowSolver:
             self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-5
             # print("before solve a")
             self.solve_a_lambda(deltaTime) # Step 6
-            self.solve_a_G(deltaTime)             #Step 7 
+            # self.solve_a_G(deltaTime)             #Step 7 
             self.integrate_velocity(deltaTime) # Step 8-9
             self.integrate_deformation_gradient(deltaTime) #Step 10-11
 
