@@ -1,6 +1,7 @@
 import taichi as ti
 import numpy as np
 
+from time import perf_counter_ns
 from taichi.math import vec2, vec3, mat3
 from particle_system import ParticleSystem
 from pressure_solver import PressureSolver
@@ -33,6 +34,8 @@ class SnowSolver:
         # TO DO: COMPUTE ADAPTIVE CORRECTION FACTORR
         self.gamma_1 = ti.field(float, shape=self.ps.num_particles)
         self.gamma_2 = ti.field(float, shape=self.ps.num_particles)
+        self.elastic_solver = ElasticSolver(self.ps)
+        self.pressure_solver = PressureSolver(self.ps)
 
     @ti.func
     def helper_sum_kernel(self, i, j, sum:ti.template()):
@@ -94,7 +97,7 @@ class SnowSolver:
 
     @ti.kernel
     def compute_boundary_volumes(self):
-        correction = 1.8
+        correction = 0.8
         for i in range(self.ps.num_b_particles):
             kernel_sum = 0.0
             for j in range(self.ps.num_b_particles):
@@ -213,29 +216,7 @@ class SnowSolver:
     def get_volume(self, i):
         return (self.ps.m_k / ti.math.max(self.ps.density[i], self.numerical_eps ) )
 
-    @ti.func
-    def helper_a_lambda_fluid_neighbors(self, i, j, sum:ti.template()):
-        Vj = self.get_volume(j)
-        density_i = self.ps.density[i] / self.ps.rest_density[i]
-        density_i2 = density_i * density_i
-        dpi = self.ps.pressure[i] / (self.ps.rest_density[i] * density_i2)
-        density_j = self.ps.density[j] / self.ps.rest_density[j]
-        density_j2 = density_j * density_j
-        dpj = (self.ps.pressure[j] / self.ps.rest_density[j]) / density_j2
-        sum -= Vj * (dpi + self.ps.rest_density[j] / self.ps.rest_density[i] * dpj) * cubic_kernel_derivative(
-            self.ps.position[i] - self.ps.position[j], self.ps.smoothing_radius
-        )
-
-    @ti.func 
-    def helper_a_lambda_b(self, i, j, sum: ti.template()):
-        density_i = self.ps.density[i]
-        density_i2 = density_i * density_i
-        dpi = self.ps.pressure[i] / (density_i2)
-        a = self.ps.rest_density[i] * self.ps.boundary_particles_volume[j] * dpi * cubic_kernel_derivative(
-            self.ps.position[i] - self.ps.boundary_particles[j], self.ps.smoothing_radius
-        )
-        sum -= a
-    
+  
     @ti.kernel
     def compute_a_lambda(self, success : ti.template()):
         for i in ti.grouped(self.ps.position):
@@ -245,15 +226,9 @@ class SnowSolver:
             ti.math.isnan(self.ps.pressure[i]) or \
             self.ps.rest_density[i] == 0.0:
                 a_lambda = ti.Vector([0.0, 0.0, 0.0])
-            else:
-                # self.ps.for_all_neighbors(i, self.helper_a_lambda_fluid_neighbors, a_lambda)
-                # self.ps.for_all_b_neighbors(i, self.helper_a_lambda_b, a_lambda)
-                
+            else:                
                 a_lambda = -1.0 / self.ps.density[i] * self.ps.pressure_gradient[i]
-            # a_lambda = ti.Vector([0.0, 9.81, 0.0])
             self.ps.acceleration[i] += a_lambda
-            # if i[0] == 0:
-            #     print("a_lambda", a_lambda)
     
     @ti.func
     def nan_check(self) -> bool:
@@ -274,13 +249,13 @@ class SnowSolver:
             Computes Step 6 in Algorithm 1 in the paper.
 
         '''
-        pressure_solver = PressureSolver(self.ps)
-        success = pressure_solver.solve(deltaTime)
+        
+        success = self.pressure_solver.solve(deltaTime)
         self.compute_a_lambda(success)
 
     def solve_a_G(self, deltaTime):
-        elastic_solver = ElasticSolver(self.ps, deltaTime)
-        a_G, exit_code = solve_elastic(elastic_solver)
+        
+        a_G, exit_code = solve_elastic(self.elastic_solver, deltaTime)
         if exit_code >= 0:
             a_G = a_G.reshape([self.ps.num_particles, 3])
             a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
@@ -457,6 +432,7 @@ class SnowSolver:
         self.ps.for_all_b_neighbors(i, self.helper_compute_velocity_gradient_b_uncorrected, grad_v_i_b_prime)
 
         L_i = self.ps.correction_matrix[i]
+        L_i = ti.Matrix.identity(float, 3)
         #if self.ps.is_pseudo_L_i[i]:
         #    L_i = self.ps.pseudo_correction_matrix[i]
         # if(i[0] == 0):
@@ -555,7 +531,11 @@ class SnowSolver:
         self.substep(deltaTime)
         # enforce the boundary of the domain (and later rigid bodies)
         self.enforce_boundary_3D()
-        self.ps.color_neighbors(0, ti.Vector([1.0, 0.0, 0.0]))
+        ta = perf_counter_ns()
+        col = ti.Vector([1.0, 0.0, 0.0])
+        self.ps.color_neighbors(0, col)
+        te = perf_counter_ns()
+        print(f"time {(te - ta) / 1e6} ms")
         # self.ps.color_neighbors(9, ti.Vector([0.0, 1.0, 0.0]))
         # self.ps.color_neighbors(99, ti.Vector([1.0, 5.0, 0.0]))
         # self.ps.color_neighbors(90, ti.Vector([0.0, 0.0, 1.0]))

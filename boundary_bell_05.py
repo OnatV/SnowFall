@@ -5,6 +5,7 @@ from trimesh.transformations import rotation_matrix
 from mesh_to_sdf import mesh_to_voxels, scale_to_unit_cube
 from scipy.interpolate import RegularGridInterpolator
 from time import time_ns
+from contextlib import redirect_stdout
 from numpy.linalg import norm
 from fluid_grid import FluidGrid
 from kernels import cubic_kernel
@@ -15,7 +16,7 @@ ti.init(arch=ti.cpu, debug=True) # cpu, to avoid insane copying
 
 # calculate SDF grid
 # box_path = Path("boundary/Box_rot.glb")
-bmw__path = Path("boundary/bunny.ply")
+bmw__path = Path("boundary/AE86.ply")
 mesh_path = bmw__path
 precomp_path = mesh_path.with_name("precomp_" + mesh_path.name).with_suffix(".npy")
 
@@ -34,7 +35,7 @@ with open(precomp_path, "rb") as rf:
     voxels = np.load(rf)
     gradients = np.load(rf)
 
-transl = np.array([1, 1, 1])
+transl = np.array([1, 1, 1]) * 2
 mesh.apply_translation(transl)
 
 verts = mesh.vertices 
@@ -84,7 +85,7 @@ class Data:
         self.sdf_grad.from_numpy(gradients)
         numFaces = mesh_faces.shape[0]
         self.time_step = 0.1
-        self.h = particle_radius * 2.1
+        self.h = particle_radius * 2.0
         self.origin = ti.Vector([0.0]*3)
         self.grid_end = ti.Vector([6.0]*3)
         self.grid_spacing = self.h * 1.2
@@ -107,21 +108,19 @@ class Data:
             e2 = x2 - x0
 
             # calculate D*A / (pi*r^2)
-            sample_density = 10
+            sample_density = 20
             area = norm(np.cross(e1, e2)) / 2.0
             numParticles = sample_density * area / (np.pi * particle_radius**2)
             numParticles = int(numParticles) + \
-                1 if np.random.uniform() < (numParticles - int(numParticles)) else 0
+                (1 if np.random.uniform() < (numParticles - int(numParticles)) else 0)
             numParticles = min(numParticles, max_particles_per_face)
-            
-            pos = np.empty(shape=(numParticles, 3))
+            pos = np.empty(shape=(numParticles, 3), dtype=np.float32)
 
             rand = np.random.uniform(size= 2 * numParticles).reshape((numParticles, 2))
-            tri_normal = np.cross(e1, e2)
+            
             for i in range(numParticles):
-                scale = np.random.random()*0.2
                 x = e1 * rand[i][0] + (1-rand[i][0])*rand[i][1]*e2
-                pos[i] = ti.Vector(x+x0+tri_normal*scale)
+                pos[i] = ti.Vector(x+x0)
             self.particle_nums[tri_idx] = numParticles
             particle_sum += numParticles
             tmp_pos.append(pos)
@@ -162,6 +161,7 @@ class Data:
     def update_vr(self): # V_r part
         for i in ti.grouped(self.vel):
             self.vel[i] = [0,0,0]
+        
         for i in ti.grouped(self.vel):
             self.fg.for_all_neighbors(i, self.pos, self.aux_update_velocities, self.vel[i], self.h)
             vel_norm = self.vel[i].normalized(0.0001)
@@ -169,6 +169,8 @@ class Data:
             self.vel[i] = vel_norm * self.h
             #if vr.norm() > self.h * 2:
             #    vr = vr / vr.norm() * self.h * 2
+        
+        
             
     @ti.func
     def max_velocity(self) -> float:
@@ -228,7 +230,7 @@ class Data:
                 phi = max(0, phi)
 
             v_f = -phi * n
-            self.vel[i] += v_f * 100.0
+            self.vel[i] += v_f * 7.0
 
 data = Data(verts, faces)
 
@@ -267,8 +269,13 @@ while window.running:
     scene.mesh(vertices=vertices, indices=indices ,color=(1.0,0.0,0.0), show_wireframe=True)
     #data.color_reset()
     #data.neigh_color(0)
-    if particle_sim:    
+    if particle_sim:   
+        #ti.profiler.clear_kernel_profiler_info()
+        
+        ta = time_ns() 
         data.update_velocity()
+        te = time_ns()
+        #print(f"\rvel step: {(te - ta) / 1e6} ms", end="")
         data.update_positions()
         data.fg.update_grid(data.pos)
         data.color_density()
