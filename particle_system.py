@@ -5,6 +5,7 @@ import configparser
 from time import time_ns
 from snow_config import SnowConfig
 from fluid_grid import FluidGrid
+vec3 = ti.types.vector(3, float)
 
 @ti.data_oriented
 class ParticleSystem:
@@ -273,18 +274,22 @@ class ParticleSystem:
         self.boundary_colors[j] = color
 
     @ti.kernel
-    def color_neighbors(self, i:int, color:ti.template()):
+    def color_neighbors(self, i:int, color:vec3):
         self.colors[i] = ti.Vector([0.0, 1.0, 0.0])
-        self.for_all_neighbors(ti.Vector([i]), self.set_neighbor_color, color)
+        self.for_all_neighbors_vec3(ti.Vector([i]), self.set_neighbor_color, color)
 
     @ti.kernel
-    def color_b_neighbors(self, i:int, color:ti.template()):
-        self.for_all_b_neighbors(ti.Vector([i]), self.set_b_neighbor_color, color)
+    def color_b_neighbors(self, i:int, color:vec3):
+        self.for_all_b_neighbors_vec3(ti.Vector([i]), self.set_b_neighbor_color, color)
     
 
     def update_boundary_grid(self):
         self.b_grid.update_grid(self.boundary_particles)
 
+    @ti.func
+    def for_all_neighbors_vec3(self, i, func : ti.template(), ret : vec3):
+        # pos = self.position[i]
+        self.fluid_grid.for_all_neighbors_vec3(i, self.position, func, ret, self.smoothing_radius)
 
     @ti.func
     def for_all_neighbors(self, i, func : ti.template(), ret : ti.template()):
@@ -307,6 +312,14 @@ class ParticleSystem:
         position = self.position[i]
         self.b_grid.for_all_b_neighbors(i, position, self.boundary_particles, func, ret, self.smoothing_radius)
         
+    @ti.func
+    def for_all_b_neighbors_vec3(self, i, func : ti.template(), ret : vec3):
+        '''
+            Boundary neighbors of fluid particle i.
+        '''
+        position = self.position[i]
+        self.b_grid.for_all_b_neighbors_vec3(i, position, self.boundary_particles, func, ret, self.smoothing_radius)
+
 
     def visualize(self):
         self.camera.track_user_inputs(self.window, movement_speed=0.03, hold_key=ti.ui.RMB)

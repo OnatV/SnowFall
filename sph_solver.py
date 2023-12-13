@@ -1,6 +1,7 @@
 import taichi as ti
 import numpy as np
 
+from time import perf_counter_ns
 from taichi.math import vec2, vec3, mat3
 from particle_system import ParticleSystem
 from pressure_solver import PressureSolver
@@ -530,7 +531,7 @@ class SnowSolver:
             self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-5
             # print("before solve a")
             self.solve_a_lambda(deltaTime) # Step 6
-            self.solve_a_G(deltaTime)             #Step 7 
+            #self.solve_a_G(deltaTime)             #Step 7 
             self.integrate_velocity(deltaTime) # Step 8-9
             self.integrate_deformation_gradient(deltaTime) #Step 10-11
 
@@ -557,8 +558,11 @@ class SnowSolver:
         self.substep(deltaTime)
         # enforce the boundary of the domain (and later rigid bodies)
         self.enforce_boundary_3D()
+        ta = perf_counter_ns()
         col = ti.Vector([1.0, 0.0, 0.0])
         self.ps.color_neighbors(0, col)
+        te = perf_counter_ns()
+        print(f"time {(te - ta) / 1e6} ms")
         # self.ps.color_neighbors(9, ti.Vector([0.0, 1.0, 0.0]))
         # self.ps.color_neighbors(99, ti.Vector([1.0, 5.0, 0.0]))
         # self.ps.color_neighbors(90, ti.Vector([0.0, 0.0, 1.0]))
