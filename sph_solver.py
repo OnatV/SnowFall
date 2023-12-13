@@ -184,11 +184,11 @@ class SnowSolver:
         detF = ti.abs(ti.Matrix.determinant(self.ps.deformation_gradient[i]))
         density_i = 0.0
         self.ps.for_all_neighbors(i, self.calc_density, density_i)
-        self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
         self.ps.density[i] = density_i
         self.ps.rest_density[i] = self.ps.density[i] * detF
+        self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
         # Eq 21 from the paper, we use only the fluid particles to compute rest denstiy
-        # self.ps.density[i] = density_i
+        self.ps.density[i] = density_i
 
 
         # if i[0] == 0:
@@ -476,7 +476,7 @@ class SnowSolver:
     @ti.func
     def clamp_deformation_gradients(self, matrix):
         U, S, V = ti.svd(matrix)
-        S = ti.math.clamp(S, 1.0 - self.ps.theta_clamp_c, 1.0 + self.ps.theta_clamp_s)
+        S = ti.math.clamp(S, self.ps.theta_clamp_c, self.ps.theta_clamp_s)
         return V @ S @ V.transpose() ## This supposedly removes the rotation part
     
 

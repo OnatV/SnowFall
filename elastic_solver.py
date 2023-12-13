@@ -29,7 +29,7 @@ class ElasticSolver:
     @ti.func
     def clamp_deformation_gradients(self, matrix):
         U, S, V = ti.svd(matrix)
-        S = ti.math.clamp(S, 1.0 - self.ps.theta_clamp_c, 1.0 + self.ps.theta_clamp_s)
+        S = ti.math.clamp(S, self.ps.theta_clamp_c, self.ps.theta_clamp_s)
         return V @ S @ V.transpose() ## This supposedly removes the rotation part
 
     # ----------------------------------------- RHS -----------------------------------------#
@@ -83,7 +83,7 @@ class ElasticSolver:
     @ti.func 
     def compute_stress_tensor_pred(self, i):
         F_E_pred = self.ps.deformation_gradient[i] + self.deltaTime * self.velocity_pred_grad[i] @ self.ps.deformation_gradient[i]
-        # F_E_pred = self.clamp_deformation_gradients(F_E_pred)
+        F_E_pred = self.clamp_deformation_gradients(F_E_pred)
         strain = 0.5 * (F_E_pred + F_E_pred.transpose())
         self.stress_tensor_pred[i] = (2 * self.ps.G_t_i[i]) * (strain - ti.Matrix.identity(float, 3) )
 
