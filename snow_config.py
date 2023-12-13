@@ -76,7 +76,9 @@ class SnowConfig:
         if 'BOUNDARY_OBJECTS' in config.keys():
             s = config['BOUNDARY_OBJECTS']['paths']
             self.object_paths =  map(str.strip, s.split(','))
-            
+            self.object_scales = list2vec(config['BOUNDARY_OBJECTS']['scales'])
+            self.object_pos = list2vec(config['BOUNDARY_OBJECTS']['positions'])
+
         else:
             self.object_paths = []
 

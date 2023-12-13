@@ -38,6 +38,8 @@ class ParticleSystem:
         self.m_psi = self.cfg.m_psi
 
         self.object_paths = self.cfg.object_paths
+        self.object_scales = self.cfg.object_scales
+        self.object_pos = self.cfg.object_pos
 
         # allocate memory
         self.allocate_fields()
@@ -113,10 +115,12 @@ class ParticleSystem:
         # offsets to later retrieve the particles of object i
         object_offsets = [] 
         total_num_b_particles = self.num_b_particles
-        for path in self.object_paths:
+        for path, scale, pos in zip(self.object_paths, self.object_scales, self.object_pos):
             print("loading boundary object from", path)
             with open(path, "rb") as rf:
                 particle_pos = np.load(rf)
+                particle_pos *= scale
+                particle_pos += pos
                 pos_tmp.append(particle_pos)
                 object_offsets.append(total_num_b_particles)
                 total_num_b_particles += particle_pos.shape[0]
@@ -328,7 +332,8 @@ class ParticleSystem:
         self.draw_domain()
         self.draw_particles()
         self.canvas.scene(self.scene)
-        self.object_control_gui()
+        if self.boundary_objects != []:
+            self.object_control_gui()
         self.window.show()
 
     def initalize_domain_viz(self):
