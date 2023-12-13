@@ -49,7 +49,7 @@ def cubic_kernel_derivative_corrected(r, h, L) -> ti.Vector:
     r_norm = r.norm()
     q = r_norm / h
     d_w = ti.Vector([0.0, 0.0, 0.0])
-    L = ti.Matrix.identity(float,3)
+    # L = ti.Matrix.identity(float,3)
     if r_norm > 1e-5 and q <= 1.0:
         grad_q = r / (r_norm * h)
         if q < 0.5:
@@ -57,4 +57,4 @@ def cubic_kernel_derivative_corrected(r, h, L) -> ti.Vector:
         else:
             f = 1.0 - q
             d_w = l * (-f * f) * grad_q
-    return L @ d_w
+    return d_w
