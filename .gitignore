@@ -167,7 +167,7 @@ profiling/
 
 .vscode/
 *.npy
-
+!boundary/output_Box_rot.npy
 
 # dataset
 *.hdf5

@@ -73,6 +73,15 @@ class SnowConfig:
             self.boundary_height = float(config['BOUNDARY']['height'])
             self.num_boundary_particles = int((self.boundary_length / self.boundary_particle_radius) * (self.boundary_width / self.boundary_particle_radius) * (self.boundary_height / self.boundary_particle_radius))
 
+        if 'BOUNDARY_OBJECTS' in config.keys():
+            s = config['BOUNDARY_OBJECTS']['paths']
+            self.object_paths =  map(str.strip, s.split(','))
+            self.object_scales = list2vec(config['BOUNDARY_OBJECTS']['scales'])
+            self.object_pos = list2vec(config['BOUNDARY_OBJECTS']['positions'])
+
+        else:
+            self.object_paths = []
+
         print(self.initialize_type)
 def list2vec(strlist: str):
     return np.array(json.loads(strlist))

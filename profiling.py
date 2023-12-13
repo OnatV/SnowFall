@@ -1,7 +1,7 @@
 import taichi as ti
 import cProfile as cprof
-import pathlib
 
+from pathlib import Path
 from contextlib import redirect_stdout
 from sys import argv
 from utils import *
@@ -28,16 +28,17 @@ proftype = "taichi" if "taichi" in argv else "cprof"
 
 def main():
     ti.init(arch=ti.cpu if ARCH == "cpu" else ti.gpu, kernel_profiler=(proftype == "taichi"))
-    cfg = SnowConfig()
+    cfg = SnowConfig("configs/snow_brick.ini")
     ps = ParticleSystem(cfg)
     snow_solver = SnowSolver(ps)
 
-    p = pathlib.Path(profDir)
+    p = Path(profDir)
     if not p.exists():
         p.mkdir()
 
+    snow_solver.step(cfg.deltaTime, 0)
     if proftype == "cprof":
-        cprof.runctx("s.step(cfg.deltaTime)", {}, {
+        cprof.runctx("s.step(cfg.deltaTime, 0.1)", {}, {
             "s": snow_solver,
             "cfg": cfg
         },  str(p / f"solver_{ARCH}_{proftype}.prof"))
@@ -46,9 +47,11 @@ def main():
         }, str(p / f"render_{ARCH}_{proftype}.prof") + f"_{ARCH}_{proftype}")
     elif proftype == "taichi":
         ti.profiler.clear_kernel_profiler_info()
-        snow_solver.step(cfg.deltaTime)
+        ti.profiler.clear_scoped_profiler_info()
+        snow_solver.step(cfg.deltaTime, 1)
         with open(str(p / f"solver_{ARCH}_{proftype}.prof"), "w") as fout:
             with redirect_stdout(fout):
+                ti.profiler.print_scoped_profiler_info()
                 ti.profiler.print_kernel_profiler_info('trace')
     
 

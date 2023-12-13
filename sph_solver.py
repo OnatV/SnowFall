@@ -1,6 +1,7 @@
 import taichi as ti
 import numpy as np
 
+from time import perf_counter_ns
 from taichi.math import vec2, vec3, mat3
 from particle_system import ParticleSystem
 from pressure_solver import PressureSolver
@@ -34,6 +35,8 @@ class SnowSolver:
         # TO DO: COMPUTE ADAPTIVE CORRECTION FACTORR
         self.gamma_1 = ti.field(float, shape=self.ps.num_particles)
         self.gamma_2 = ti.field(float, shape=self.ps.num_particles)
+        self.elastic_solver = ElasticSolver(self.ps)
+        self.pressure_solver = PressureSolver(self.ps)
 
         self.adhesion_model = AdhesionModel(self.ps)
 
@@ -277,13 +280,13 @@ class SnowSolver:
             Computes Step 6 in Algorithm 1 in the paper.
 
         '''
-        pressure_solver = PressureSolver(self.ps)
-        success = pressure_solver.solve(deltaTime)
+        
+        success = self.pressure_solver.solve(deltaTime)
         self.compute_a_lambda(success)
 
     def solve_a_G(self, deltaTime):
-        elastic_solver = ElasticSolver(self.ps, deltaTime)
-        a_G, exit_code = solve_elastic(elastic_solver)
+        
+        a_G, exit_code = solve_elastic(self.elastic_solver, deltaTime)
         if exit_code >= 0:
             a_G = a_G.reshape([self.ps.num_particles, 3])
             a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
@@ -309,7 +312,7 @@ class SnowSolver:
         '''
             Helper of self.compute_correction_matrix for boundary particles
         '''
-        x_ib = self.ps.position[i_idx] - self.ps.boundary_particles[b_idx] # x_ij: vec3
+        x_ib = self.ps.position[i_idx] - self.ps.boundary_particles[b_idx] # x_ib: vec3
         w_ib = cubic_kernel_derivative(x_ib, self.ps.smoothing_radius)
         V_b =  self.ps.boundary_particles_volume[b_idx]
 
@@ -322,13 +325,10 @@ class SnowSolver:
 
             Computes L_i as defined in the paper. 
             
-            If os.is_pseudo_L_i[i] is true, 
-                use L_i = pseudo_correction_matrix[i]
-            else
-                use L_i = correction_matrix[i]
+            if A_i cannot be computed, the pseudo inverse
+            is given by (A^T @ A)^1.
+            L_i is then Pseudo_i @ A^T_i (L_i can be directly used)
         '''
-        x_i = self.ps.position[i]
-        self.ps.is_pseudo_L_i[i] = False
         tmp_i = ti.Matrix.zero(dt=float, n=3, m=3)
         self.ps.for_all_neighbors(i, self.aux_correction_matrix, tmp_i)
         self.ps.for_all_b_neighbors(i, self.aux_correction_matrix_b, tmp_i)
@@ -338,14 +338,9 @@ class SnowSolver:
             self.ps.correction_matrix[i] = tmp_i.inverse()
         else: # no inverse 
               # hence use the peudoinverse
-              # other code can use is_pseudo property
-              # if true, the kernel_grad Wij must be transformed to 
-              # tmp_i.transpose() * W_ij, and then
-              # ~grad = pseudo_inv * tmp_i.transpose() * W_ij
             pseudo = (tmp_i.transpose() * tmp_i).inverse()
-            self.ps.pseudo_correction_matrix[i] = pseudo
-            self.ps.correction_matrix[i] = tmp_i
-            self.ps.is_pseudo_L_i[i] = True
+            self.ps.correction_matrix[i] = pseudo * tmp_i.transpose()
+            
 
     @ti.func
     def compute_accel_ext(self, i):
@@ -494,8 +489,8 @@ class SnowSolver:
         self.ps.for_all_b_neighbors(i, self.helper_compute_velocity_gradient_b_uncorrected, grad_v_i_b_prime)
 
         L_i = self.ps.correction_matrix[i]
-        if self.ps.is_pseudo_L_i[i]:
-            L_i = self.ps.pseudo_correction_matrix[i]
+        #if self.ps.is_pseudo_L_i[i]:
+        #    L_i = self.ps.pseudo_correction_matrix[i]
         # if(i[0] == 0):
         #     print("---LI---", L_i)
         ##In the Paragraph between Eq17 and Eq18
@@ -592,7 +587,11 @@ class SnowSolver:
         self.substep(deltaTime)
         # enforce the boundary of the domain (and later rigid bodies)
         self.enforce_boundary_3D()
-        self.ps.color_neighbors(0, ti.Vector([1.0, 0.0, 0.0]))
+        ta = perf_counter_ns()
+        col = ti.Vector([1.0, 0.0, 0.0])
+        self.ps.color_neighbors(0, col)
+        te = perf_counter_ns()
+        print(f"time {(te - ta) / 1e6} ms")
         # self.ps.color_neighbors(9, ti.Vector([0.0, 1.0, 0.0]))
         # self.ps.color_neighbors(99, ti.Vector([1.0, 5.0, 0.0]))
         # self.ps.color_neighbors(90, ti.Vector([0.0, 0.0, 1.0]))
