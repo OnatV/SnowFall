@@ -11,7 +11,7 @@ from particle_system import ParticleSystem
 
 @ti.data_oriented
 class ElasticSolver:
-    def __init__(self, ps:ParticleSystem, dt):
+    def __init__(self, ps:ParticleSystem):
         self.ps = ps
         self.velocity_pred = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
         self.basis_vec = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
@@ -22,7 +22,7 @@ class ElasticSolver:
         self.lhs = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
         self.stress_tensor_pred = ti.Matrix.field(m=self.ps.dim, n=self.ps.dim, dtype=float, shape=self.ps.num_particles)
         self.basis_stress_tensor = ti.Matrix.field(m=self.ps.dim, n=self.ps.dim, dtype=float, shape=self.ps.num_particles)
-        self.deltaTime = dt
+        self.deltaTime = 0.1
 
     @ti.func
     def get_volume(self, i):
@@ -43,6 +43,7 @@ class ElasticSolver:
         L_i = self.ps.correction_matrix[i]
         if self.ps.is_pseudo_L_i[i]:
             L_i = self.ps.pseudo_correction_matrix[i]
+        L_i = ti.Matrix.identity(float, 3)
         grad_v_i_tilde = grad_v_i_s_prime @ L_i.transpose() + (grad_v_i_b_prime  @ L_i.transpose()).trace() * ti.Matrix.identity(float, 3) / 3        
         V_i_prime = (grad_v_i_s_prime + grad_v_i_b_prime).trace() * ti.Matrix.identity(float, 3) / 3
         R_i_tilde = (grad_v_i_tilde - grad_v_i_tilde.transpose()) / 2 
@@ -80,7 +81,13 @@ class ElasticSolver:
         F_E_pred = self.ps.deformation_gradient[i] + self.deltaTime * self.velocity_pred_grad[i] @ self.ps.deformation_gradient[i]
         F_E_pred = self.clamp_deformation_gradients(F_E_pred)
         strain = 0.5 * (F_E_pred + F_E_pred.transpose())
-        self.stress_tensor_pred[i] = 2 * self.ps.G_t_i[i] * (strain  - ti.Matrix.identity(float, 3))
+        self.stress_tensor_pred[i] = (2 * self.ps.G_t_i[i]) * (strain - ti.Matrix.identity(float, 3) )
+
+    @ti.func
+    def clamp_deformation_gradients(self, matrix):
+        U, S, V = ti.svd(matrix)
+        S = ti.math.clamp(S, self.ps.theta_clamp_c, self.ps.theta_clamp_s)
+        return V @ S @ V.transpose() ## This supposedly removes the rotation part
 
     @ti.func
     def clamp_deformation_gradients(self, matrix):
@@ -124,6 +131,7 @@ class ElasticSolver:
         for i in ti.grouped(self.ps.position):
             self.compute_stress_tensor_pred(i)            
             self.rhs[i] = (1.0 / self.ps.density[i]) * self.compute_stress_pred_div(i)
+            # print(self.rhs[i])
 
     # ----------------------------------------- LHS -----------------------------------------#
     # this func is a copy+paste of above velocity gradient discretization
@@ -136,6 +144,7 @@ class ElasticSolver:
         L_i = self.ps.correction_matrix[i]
         if self.ps.is_pseudo_L_i[i]:
             L_i = self.ps.pseudo_correction_matrix[i]
+        L_i = ti.Matrix.identity(float, 3)
         grad_v_i_tilde = grad_v_i_s_prime @ L_i.transpose() + (grad_v_i_b_prime  @ L_i.transpose()).trace() * ti.Matrix.identity(float, 3) / 3        
         V_i_prime = (grad_v_i_s_prime + grad_v_i_b_prime).trace() * ti.Matrix.identity(float, 3) / 3
         R_i_tilde = (grad_v_i_tilde - grad_v_i_tilde.transpose()) / 2 
@@ -229,8 +238,8 @@ def linop(v, es):
     es.compute_lhs()
     return es.lhs.to_numpy().reshape([3 * es.ps.num_particles,])
 
-
-def solve(es: ElasticSolver):
+def solve(es: ElasticSolver, dt:float):
+    es.deltaTime = dt
     es.compute_rhs()
     b = es.rhs.to_numpy().reshape([3 * es.ps.num_particles,])
     A = LinearOperator(shape=(3 * es.ps.num_particles, 3 * es.ps.num_particles), matvec=lambda x: linop(x, es))

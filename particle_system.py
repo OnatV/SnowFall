@@ -2,8 +2,10 @@ import taichi as ti
 import numpy as np
 import configparser
 
+from time import time_ns
 from snow_config import SnowConfig
 from fluid_grid import FluidGrid
+vec3 = ti.types.vector(3, float)
 
 @ti.data_oriented
 class ParticleSystem:
@@ -21,6 +23,7 @@ class ParticleSystem:
         self.gravity = ti.Vector(self.cfg.gravity)
         self.temperature = -10.0 # degrees Celsuis
         self.m_k = np.pi * float(4/3) * self.particle_radius ** self.dim * self.init_density # particle mass
+        self.particle_spacing = self.cfg.particle_spacing
         # self.m_k = 0.008
         self.smoothing_radius = self.cfg.smoothing_radius_ratio * self.particle_radius
         # self.boundary_smoothing_radius = self.boundary_particle_radius * 4.0
@@ -36,6 +39,8 @@ class ParticleSystem:
         self.m_psi = self.cfg.m_psi
 
         self.object_paths = self.cfg.object_paths
+        self.object_scales = self.cfg.object_scales
+        self.object_pos = self.cfg.object_pos
 
         # allocate memory
         self.allocate_fields()
@@ -88,8 +93,8 @@ class ParticleSystem:
 
         self.padding = 0.1 * self.grid_spacing
         # self.boundary_particle_spacing = self.boundary_particle_radius # important quantity for figuring out boundary volume
-        
-        self.handle_boundary_objects()
+        # if self.object_paths is not None:
+        self.import_boundary_objects()
         
         self.velocity_star = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles) #@@
 
@@ -105,16 +110,18 @@ class ParticleSystem:
         ])
         self.colors = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
 
-    def handle_boundary_objects(self):
+    def import_boundary_objects(self):
         pos_tmp = []
         self.boundary_objects = []
         # offsets to later retrieve the particles of object i
         object_offsets = [] 
         total_num_b_particles = self.num_b_particles
-        for path in self.object_paths:
+        for path, scale, pos in zip(self.object_paths, self.object_scales, self.object_pos):
             print("loading boundary object from", path)
             with open(path, "rb") as rf:
                 particle_pos = np.load(rf)
+                particle_pos *= scale
+                particle_pos += pos
                 pos_tmp.append(particle_pos)
                 object_offsets.append(total_num_b_particles)
                 total_num_b_particles += particle_pos.shape[0]
@@ -163,22 +170,22 @@ class ParticleSystem:
     @ti.kernel
     def initialize_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template()):
         # print("Block length", block_length)
-        # block_position = origin
-        # positions = ti.Vector.field(3, dtype=float, shape=int(len_x / self.particle_radius) * int(len_z / self.particle_radius) * int(len_y / self.particle_radius))
+        print((int(len_x / self.particle_spacing)), int(len_y / self.particle_spacing), int(len_z / self.particle_spacing))
         for i in range(self.num_particles):
             self.position[i] = ti.Vector([0.0, 0.0, 0.0])
-        for i in range(int(len_x / self.particle_radius)):
-            for j in range(int(len_z / self.particle_radius)):
-                for k in range(int(len_y / self.particle_radius)):
-                    x = i * (self.particle_radius) + origin[0]
-                    y = j * (self.particle_radius) + origin[2]
-                    z = k * (self.particle_radius) + origin[1]
-                    self.position[int(k * (len_x / self.particle_radius) * (len_z / self.particle_radius) + j * (len_x / self.particle_radius) + i)] = ti.Vector([x, z, y])
+        for i in range(int((len_x / self.particle_spacing))):
+            for j in range(int((len_z / self.particle_spacing))):
+                for k in range(int((len_y / self.particle_spacing))):
+                    x = i * (self.particle_spacing) + origin[0]
+                    y = j * (self.particle_spacing) + origin[2]
+                    z = k * (self.particle_spacing) + origin[1]
+                    self.position[int(k * (len_x / self.particle_spacing) * (len_z / self.particle_spacing) + j * (len_x / self.particle_spacing) + i)] = ti.Vector([x, z, y])
     @ti.kernel
     def initialize_boundary_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template()):
-        # print("Block length", block_length)
+        print("Boundary Block length", len_x)
         # block_position = origin
         # positions = ti.Vector.field(3, dtype=float, shape=int(len_x / self.particle_radius) * int(len_z / self.particle_radius) * int(len_y / self.particle_radius))
+        print((int(len_x / self.boundary_particle_radius)), int(len_y / self.boundary_particle_radius), int(len_z / self.boundary_particle_radius))
         for i in range(self.num_particles):
             self.boundary_particles[i] = ti.Vector([0.0, 0.0, 0.0])
         for i in range(int(len_x / self.boundary_particle_radius)):
@@ -253,11 +260,14 @@ class ParticleSystem:
         self.gradient_initialize()
         print("Intialized!")
 
-    def update_grid(self):
+    @ti.kernel
+    def color_reset(self):
         for i in range(self.num_particles):
             self.colors[i] = ti.Vector([1.0, 1.0, 1.0])
         for i in range(self.num_b_particles):
             self.boundary_colors[i] = ti.Vector([0.4, 0.4, 0.4])
+    def update_grid(self):
+        self.color_reset()
         self.fluid_grid.update_grid(self.position)
 
     @ti.func
@@ -269,18 +279,22 @@ class ParticleSystem:
         self.boundary_colors[j] = color
 
     @ti.kernel
-    def color_neighbors(self, i:int, color:ti.template()):
+    def color_neighbors(self, i:int, color:vec3):
         self.colors[i] = ti.Vector([0.0, 1.0, 0.0])
-        self.for_all_neighbors(ti.Vector([i]), self.set_neighbor_color, color)
+        self.for_all_neighbors_vec3(ti.Vector([i]), self.set_neighbor_color, color)
 
     @ti.kernel
-    def color_b_neighbors(self, i:int, color:ti.template()):
-        self.for_all_b_neighbors(ti.Vector([i]), self.set_b_neighbor_color, color)
+    def color_b_neighbors(self, i:int, color:vec3):
+        self.for_all_b_neighbors_vec3(ti.Vector([i]), self.set_b_neighbor_color, color)
     
 
     def update_boundary_grid(self):
         self.b_grid.update_grid(self.boundary_particles)
 
+    @ti.func
+    def for_all_neighbors_vec3(self, i, func : ti.template(), ret : vec3):
+        # pos = self.position[i]
+        self.fluid_grid.for_all_neighbors_vec3(i, self.position, func, ret, self.smoothing_radius)
 
     @ti.func
     def for_all_neighbors(self, i, func : ti.template(), ret : ti.template()):
@@ -302,6 +316,15 @@ class ParticleSystem:
         '''
         position = self.position[i]
         self.b_grid.for_all_b_neighbors(i, position, self.boundary_particles, func, ret, self.smoothing_radius)
+        
+    @ti.func
+    def for_all_b_neighbors_vec3(self, i, func : ti.template(), ret : vec3):
+        '''
+            Boundary neighbors of fluid particle i.
+        '''
+        position = self.position[i]
+        self.b_grid.for_all_b_neighbors_vec3(i, position, self.boundary_particles, func, ret, self.smoothing_radius)
+
 
     def visualize(self):
         self.camera.track_user_inputs(self.window, movement_speed=0.03, hold_key=ti.ui.RMB)
@@ -310,7 +333,8 @@ class ParticleSystem:
         self.draw_domain()
         self.draw_particles()
         self.canvas.scene(self.scene)
-        self.object_control_gui()
+        if self.boundary_objects != []:
+            self.object_control_gui()
         self.window.show()
 
     def initalize_domain_viz(self):

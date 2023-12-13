@@ -58,7 +58,9 @@ class SnowConfig:
             self.block_length = float(config['BLOCK']['length'])
             self.block_width = float(config['BLOCK']['width'])
             self.block_height = float(config['BLOCK']['height'])
-            self.num_particles = int((self.block_length / self.particle_radius) * (self.block_width / self.particle_radius) * (self.block_height / self.particle_radius))
+            self.particle_spacing = float(config['BLOCK']['spacing'])
+            self.num_particles = int((self.block_length / self.particle_spacing) * (self.block_width / self.particle_spacing) * (self.block_height / self.particle_spacing))
+            print("num particles", self.num_particles)
 
         if 'LOGGING' in config.keys(): # consider changing for upper/lowercase matches
             self.logging = config['LOGGING']['logging'] == 'true'
@@ -76,9 +78,12 @@ class SnowConfig:
         if 'BOUNDARY_OBJECTS' in config.keys():
             s = config['BOUNDARY_OBJECTS']['paths']
             self.object_paths =  map(str.strip, s.split(','))
-            
+            self.object_scales = list2vec(config['BOUNDARY_OBJECTS']['scales'])
+            self.object_pos = list2vec(config['BOUNDARY_OBJECTS']['positions'])
+
         else:
             self.object_paths = []
+            self.show_gui = False
 
         print(self.initialize_type)
 def list2vec(strlist: str):
