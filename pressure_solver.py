@@ -124,7 +124,7 @@ class PressureSolver:
         min_iterations = 3 # in paper, seemed to converge in 5 iterations or less
         is_solved = False
         it = 0
-        eta = 0.01 * 0.1 * self.ps.avg_rest_density[0]
+        eta = 0.1 * 0.1 * self.ps.avg_rest_density[0]
         print("eta", eta)
         while ( (not is_solved or it < min_iterations) and it < max_iterations):
             it = it + 1
@@ -145,7 +145,7 @@ class PressureSolver:
                 is_solved = True
             else:
                 is_solved = False
-        self.update_pressure_gradient()
+        # self.update_pressure_gradient()
         return is_solved       
 
     @ti.kernel
