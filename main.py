@@ -2,6 +2,7 @@ import numpy as np
 import taichi as ti
 import argparse
 import time
+import os
 
 from utils import *
 from particle_system import ParticleSystem
@@ -35,6 +36,8 @@ if __name__ =='__main__':
             # press SPACE to start the simulation
             if ps.window.is_pressed(ti.ui.SPACE, ' '): sim_is_running = True
             if ps.window.is_pressed(ti.ui.ALT): sim_is_running = False
+            if ps.window.is_pressed(ti.ui.BACKSPACE):
+                ps.window.running = False
             if sim_is_running:
                 print("Time:", sim_time)
                 snow_solver.step(cfg.deltaTime, sim_time)
@@ -65,3 +68,8 @@ if __name__ =='__main__':
                         sim_is_running = False                        
                     current_time = time.time()
             ps.visualize()
+
+    snow_pos = ps.position.to_numpy()
+    output_path = os.path.join(cfg.log_dir, "particle_positions.npy")
+    with open(output_path, "wb") as snowOut:
+        np.save(snowOut, snow_pos)
