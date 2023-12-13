@@ -124,8 +124,9 @@ class PressureSolver:
         min_iterations = 3 # in paper, seemed to converge in 5 iterations or less
         is_solved = False
         it = 0
-        eta = 0.1 * 0.1 * self.ps.avg_rest_density[0]
-        print("eta", eta)
+        eta = 0.01 * 0.1 * self.ps.avg_rest_density[0]
+        print("density", self.ps.density[0])
+        print("rest_density", self.ps.rest_density[0])
         while ( (not is_solved or it < min_iterations) and it < max_iterations):
             it = it + 1
             avg_density_error = self.implicit_pressure_solver_step(deltaTime)
