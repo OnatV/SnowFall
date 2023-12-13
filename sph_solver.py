@@ -282,7 +282,7 @@ class SnowSolver:
 
     def solve_a_G(self, deltaTime):
         
-        a_G, exit_code = solve_elastic(self.elastic_solver)
+        a_G, exit_code = solve_elastic(self.elastic_solver, deltaTime)
         if exit_code >= 0:
             a_G = a_G.reshape([self.ps.num_particles, 3])
             a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
