@@ -33,6 +33,8 @@ class SnowSolver:
         # TO DO: COMPUTE ADAPTIVE CORRECTION FACTORR
         self.gamma_1 = ti.field(float, shape=self.ps.num_particles)
         self.gamma_2 = ti.field(float, shape=self.ps.num_particles)
+        self.elastic_solver = ElasticSolver(self.ps)
+        self.pressure_solver = PressureSolver(self.ps)
 
     @ti.func
     def helper_sum_kernel(self, i, j, sum:ti.template()):
@@ -274,13 +276,13 @@ class SnowSolver:
             Computes Step 6 in Algorithm 1 in the paper.
 
         '''
-        pressure_solver = PressureSolver(self.ps)
-        success = pressure_solver.solve(deltaTime)
+        
+        success = self.pressure_solver.solve(deltaTime)
         self.compute_a_lambda(success)
 
     def solve_a_G(self, deltaTime):
-        elastic_solver = ElasticSolver(self.ps, deltaTime)
-        a_G, exit_code = solve_elastic(elastic_solver)
+        
+        a_G, exit_code = solve_elastic(self.elastic_solver)
         if exit_code >= 0:
             a_G = a_G.reshape([self.ps.num_particles, 3])
             a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
@@ -555,7 +557,8 @@ class SnowSolver:
         self.substep(deltaTime)
         # enforce the boundary of the domain (and later rigid bodies)
         self.enforce_boundary_3D()
-        self.ps.color_neighbors(0, ti.Vector([1.0, 0.0, 0.0]))
+        col = ti.Vector([1.0, 0.0, 0.0])
+        self.ps.color_neighbors(0, col)
         # self.ps.color_neighbors(9, ti.Vector([0.0, 1.0, 0.0]))
         # self.ps.color_neighbors(99, ti.Vector([1.0, 5.0, 0.0]))
         # self.ps.color_neighbors(90, ti.Vector([0.0, 0.0, 1.0]))
