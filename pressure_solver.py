@@ -156,7 +156,7 @@ class PressureSolver:
             self.compute_pressure_gradient(i)
         for i in ti.grouped(self.ps.position):
             self.compute_A_p(i, deltaTime, density_error)
-        return density_error / self.ps.num_particles
+        return density_error[0] / float(self.ps.num_particles)
 
     @ti.func
     def get_volume(self, i):
