@@ -36,7 +36,7 @@ if __name__ =='__main__':
             if ps.window.is_pressed(ti.ui.SPACE, ' '): sim_is_running = True
             if ps.window.is_pressed(ti.ui.ALT): sim_is_running = False
             if sim_is_running:
-                print("Time:", sim_time)
+                # print("Time:", sim_time)
                 snow_solver.step(cfg.deltaTime, sim_time)
                 # sim_is_running = False # press space for one step at a time
                 if sim_time - last_log_time > logger.log_time_step or sim_time == 0.0:

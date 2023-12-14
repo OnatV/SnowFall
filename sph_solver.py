@@ -30,7 +30,7 @@ class SnowSolver:
         self.numerical_eps = 1e-6
         self.friction_coef = self.ps.friction_coef
 
-        self.h = 2 * self.ps.boundary_particle_radius ##Particle Spacing 
+        self.h = self.ps.particle_spacing ##Particle Spacing  for friction
         # self.init_kernel_lookup()
         # TO DO: COMPUTE ADAPTIVE CORRECTION FACTORR
         self.gamma_1 = ti.field(float, shape=self.ps.num_particles)
@@ -100,7 +100,7 @@ class SnowSolver:
 
     @ti.kernel
     def compute_boundary_volumes(self):
-        correction = 1.8
+        correction = 0.8
         for i in range(self.ps.num_b_particles):
             kernel_sum = 0.0
             for j in range(self.ps.num_b_particles):
@@ -148,7 +148,7 @@ class SnowSolver:
 
         for i in range(self.ps.num_particles):
             self.ps.velocity[i] = self.ps.velocity[i] + (deltaTime * self.ps.acceleration[i])
-
+            # self.ps.velocity[i] = self.ps.velocity[i] / self.ps.velocity[i].norm()
     @ti.kernel
     def update_position(self, deltaTime: float):
         for i in range(self.ps.num_particles):
@@ -187,12 +187,11 @@ class SnowSolver:
         detF = ti.abs(ti.Matrix.determinant(self.ps.deformation_gradient[i]))
         density_i = 0.0
         self.ps.for_all_neighbors(i, self.calc_density, density_i)
-        self.ps.density[i] = density_i
         self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
-
+        self.ps.density[i] = density_i
         self.ps.rest_density[i] = self.ps.density[i] * detF
         # Eq 21 from the paper, we use only the fluid particles to compute rest denstiy
-        self.ps.density[i] = density_i
+        # self.ps.density[i] = density_i
 
 
         # if i[0] == 0:
@@ -203,7 +202,7 @@ class SnowSolver:
         '''
             Step 2 : Eq 20 from the paper, part1
         '''
-        rnorm = ti.Vector.norm(self.ps.position[i_idx] - self.ps.position[j_idx])
+        rnorm = ti.Vector.norm(self.ps.position[i_idx] - self.ps.position[j_idx]) 
         d += cubic_kernel(rnorm, self.ps.smoothing_radius) * self.ps.m_k
 
     @ti.func
@@ -219,29 +218,7 @@ class SnowSolver:
     def get_volume(self, i):
         return (self.ps.m_k / ti.math.max(self.ps.density[i], self.numerical_eps ) )
 
-    @ti.func
-    def helper_a_lambda_fluid_neighbors(self, i, j, sum:ti.template()):
-        Vj = self.get_volume(j)
-        density_i = self.ps.density[i] / self.ps.rest_density[i]
-        density_i2 = density_i * density_i
-        dpi = self.ps.pressure[i] / (self.ps.rest_density[i] * density_i2)
-        density_j = self.ps.density[j] / self.ps.rest_density[j]
-        density_j2 = density_j * density_j
-        dpj = (self.ps.pressure[j] / self.ps.rest_density[j]) / density_j2
-        sum -= Vj * (dpi + self.ps.rest_density[j] / self.ps.rest_density[i] * dpj) * cubic_kernel_derivative(
-            self.ps.position[i] - self.ps.position[j], self.ps.smoothing_radius
-        )
-
-    @ti.func 
-    def helper_a_lambda_b(self, i, j, sum: ti.template()):
-        density_i = self.ps.density[i]
-        density_i2 = density_i * density_i
-        dpi = self.ps.pressure[i] / (density_i2)
-        a = self.ps.rest_density[i] * self.ps.boundary_particles_volume[j] * dpi * cubic_kernel_derivative(
-            self.ps.position[i] - self.ps.boundary_particles[j], self.ps.smoothing_radius
-        )
-        sum -= a
-    
+  
     @ti.kernel
     def compute_a_lambda(self, success : ti.template()):
         for i in ti.grouped(self.ps.position):
@@ -251,15 +228,9 @@ class SnowSolver:
             ti.math.isnan(self.ps.pressure[i]) or \
             self.ps.rest_density[i] == 0.0:
                 a_lambda = ti.Vector([0.0, 0.0, 0.0])
-            else:
-                # self.ps.for_all_neighbors(i, self.helper_a_lambda_fluid_neighbors, a_lambda)
-                # self.ps.for_all_b_neighbors(i, self.helper_a_lambda_b, a_lambda)
-                
+            else:                
                 a_lambda = -1.0 / self.ps.density[i] * self.ps.pressure_gradient[i]
-            # a_lambda = ti.Vector([0.0, 9.81, 0.0])
             self.ps.acceleration[i] += a_lambda
-            # if i[0] == 0:
-            #     print("a_lambda", a_lambda)
     
     @ti.func
     def nan_check(self) -> bool:
@@ -361,6 +332,7 @@ class SnowSolver:
     @ti.func
     def compute_adhesion(self,i):
         self.adhesion_model.compute_adhesion_force(i)
+        pass
 
 
     @ti.func
@@ -398,8 +370,8 @@ class SnowSolver:
             sum_term = ti.Vector([0.0, 0.0, 0.0], dt = float)
             self.ps.for_all_b_neighbors(i, self.helper_compute_accel_friction, sum_term)
             
-            denom = self.ps.friction_diagonal[i][0] # * deltaTime
-            nom = self.ps.velocity[i] + deltaTime * self.ps.acceleration[i] - deltaTime * self.friction_coef * sum_term 
+            denom = self.ps.friction_diagonal[i][0] * deltaTime
+            nom = self.ps.velocity[i] + (deltaTime * self.ps.acceleration[i]) - deltaTime * self.friction_coef * sum_term 
             accel_friciton =  nom / ti.max(denom, self.numerical_eps)
             
             if i[0] == 0:
@@ -489,6 +461,7 @@ class SnowSolver:
         self.ps.for_all_b_neighbors(i, self.helper_compute_velocity_gradient_b_uncorrected, grad_v_i_b_prime)
 
         L_i = self.ps.correction_matrix[i]
+        L_i = ti.Matrix.identity(float, 3)
         #if self.ps.is_pseudo_L_i[i]:
         #    L_i = self.ps.pseudo_correction_matrix[i]
         # if(i[0] == 0):
@@ -533,7 +506,7 @@ class SnowSolver:
     @ti.func
     def clamp_deformation_gradients(self, matrix):
         U, S, V = ti.svd(matrix)
-        S = ti.math.clamp(S, self.ps.theta_clamp_c, self.ps.theta_clamp_s)
+        S = ti.math.clamp(S, 1.0 - self.ps.theta_clamp_c, 1.0 + self.ps.theta_clamp_s)
         return V @ S @ V.transpose() ## This supposedly removes the rotation part
     
 
@@ -591,7 +564,7 @@ class SnowSolver:
         col = ti.Vector([1.0, 0.0, 0.0])
         self.ps.color_neighbors(0, col)
         te = perf_counter_ns()
-        print(f"time {(te - ta) / 1e6} ms")
+        # print(f"time {(te - ta) / 1e6} ms")
         # self.ps.color_neighbors(9, ti.Vector([0.0, 1.0, 0.0]))
         # self.ps.color_neighbors(99, ti.Vector([1.0, 5.0, 0.0]))
         # self.ps.color_neighbors(90, ti.Vector([0.0, 0.0, 1.0]))

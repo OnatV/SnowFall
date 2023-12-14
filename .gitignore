@@ -171,3 +171,6 @@ profiling/
 
 # dataset
 *.hdf5
+
+*.blend
+*.ply

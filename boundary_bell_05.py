@@ -15,9 +15,9 @@ from trilinear import trilinear_interpolation
 ti.init(arch=ti.cpu, debug=True) # cpu, to avoid insane copying
 
 # calculate SDF grid
-box_path = Path("boundary/Box_rot.glb")
-#bmw__path = Path("../bmw_1_series_m_coupe/scene_merged.glb")
-mesh_path = box_path
+# box_path = Path("boundary/Box_rot.glb")
+bmw__path = Path("boundary/AE86.ply")
+mesh_path = bmw__path
 precomp_path = mesh_path.with_name("precomp_" + mesh_path.name).with_suffix(".npy")
 
 mesh = trimesh.load(mesh_path)
@@ -51,7 +51,7 @@ z = np.linspace(-1.0, 1.0, 48) * voxel_scale + transl[2]
 
 
 #num_layers = 1
-particle_radius = 0.04
+particle_radius = 0.01
 max_particles_per_face = 1524
 
 # @ti.func
@@ -85,7 +85,7 @@ class Data:
         self.sdf_grad.from_numpy(gradients)
         numFaces = mesh_faces.shape[0]
         self.time_step = 0.1
-        self.h = particle_radius * 2.1
+        self.h = particle_radius * 2.0
         self.origin = ti.Vector([0.0]*3)
         self.grid_end = ti.Vector([6.0]*3)
         self.grid_spacing = self.h * 1.2
@@ -94,7 +94,7 @@ class Data:
         print("num faces:", numFaces)
         self.particle_nums = np.empty(dtype=int, shape=numFaces)
         tmp_pos = []
-        self.allow_internal_particles = True
+        self.allow_internal_particles = False
         #self.layer_offsets = np.linspace(0.0, -1.0, num_layers)
         particle_sum = 0
         # here we init particles per face
@@ -108,7 +108,7 @@ class Data:
             e2 = x2 - x0
 
             # calculate D*A / (pi*r^2)
-            sample_density = 1.7
+            sample_density = 20
             area = norm(np.cross(e1, e2)) / 2.0
             numParticles = sample_density * area / (np.pi * particle_radius**2)
             numParticles = int(numParticles) + \
@@ -280,7 +280,7 @@ while window.running:
         data.fg.update_grid(data.pos)
         data.color_density()
         
-    scene.particles(data.pos, radius=particle_radius*1.0, per_vertex_color=data.colors)
+    scene.particles(data.pos, radius=particle_radius*0.4, per_vertex_color=data.colors)
     canvas.scene(scene)
 
     window.show()

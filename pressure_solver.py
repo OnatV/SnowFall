@@ -36,7 +36,8 @@ class PressureSolver:
         residuum = self.ps.rest_density[i] - self.ps.p_star[i] - A_p
         pi = (0.5 / (ti.math.sign(aii) * ti.math.max(ti.abs(aii), self.numerical_eps))) * residuum
         self.ps.pressure[i] += pi[0]
-        density_error -= residuum
+        # density_error -= residuum
+        density_error += ti.abs(pi)
 
     @ti.func
     def helper_diff_of_pressure_grad(self, i, j, sum:ti.template()):
@@ -98,7 +99,7 @@ class PressureSolver:
         self.ps.for_all_neighbors(i, self.helper_ViVj, ViVj)
         self.ps.for_all_neighbors(i, self.helper_Vj, Vj)
         self.ps.for_all_b_neighbors(i, self.helper_Vb, Vb)
-        self.ps.jacobian_diagonal[i] = p_lame - deltaTime2 * ViVj - deltaTime2 * (Vj + self.ps.m_psi * Vb).dot(Vj + Vb)
+        self.ps.jacobian_diagonal[i] = p_lame - deltaTime2 * ViVj - deltaTime2 * (Vj + self.ps.rest_density[i] * Vb).dot(Vj + Vb)
 
     @ti.kernel
     def implicit_solver_prepare(self, deltaTime: float):
@@ -125,10 +126,35 @@ class PressureSolver:
         is_solved = False
         it = 0
         eta = 0.01 * 0.1 * self.ps.avg_rest_density[0]
-        print("eta", eta)
+        # print("density", self.ps.density[0])
+        # print("rest_density", self.ps.rest_density[0])
+        prev_avg_density_error = 1e24
+        prev_deviation = 1e24
+        current_deviation = 1e24
+        avg_errors = []
         while ( (not is_solved or it < min_iterations) and it < max_iterations):
-            it = it + 1
             avg_density_error = self.implicit_pressure_solver_step(deltaTime)
+            it = it + 1
+            if np.isnan(avg_density_error):
+                is_solved = False
+                print("failed to solve, got nan")
+                print("avg_errors", avg_errors)
+                break
+            avg_errors.append(avg_density_error)
+            if it > 1: current_deviation = prev_avg_density_error - avg_density_error
+                
+            if it > 2 :
+                if current_deviation < (prev_deviation) * 0.001 :
+                    is_solved = True
+                    print(f"Took {it} iterations to solve lambda, avg_density_error: {avg_density_error}, prev_avg_density_error: {prev_avg_density_error}, prev_deviation: {prev_deviation}")
+                    print("avg_errors", avg_errors)
+                else:
+                    is_solved = False
+                                        
+
+            prev_deviation = current_deviation  
+            prev_avg_density_error = avg_density_error
+
             # print("-----ITERATION", it,"---------")
             # print("avg_density_error", avg_density_error)
             # print("pressure", self.ps.pressure[0])
@@ -138,14 +164,8 @@ class PressureSolver:
             # print("pressure_gradient", self.ps.pressure_gradient[0])
             # print("a_lambda", -self.ps.pressure_gradient[0] / self.ps.density[0])
             # print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
-            if np.isnan(avg_density_error):
-                is_solved = False
-                break
-            if avg_density_error <= eta:
-                is_solved = True
-            else:
-                is_solved = False
-        self.update_pressure_gradient()
+
+        # self.update_pressure_gradient()
         return is_solved       
 
     @ti.kernel
