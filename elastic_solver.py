@@ -47,7 +47,7 @@ class ElasticSolver:
         L_i = self.ps.correction_matrix[i]
         if self.ps.is_pseudo_L_i[i]:
             L_i = self.ps.pseudo_correction_matrix[i]
-        L_i = ti.Matrix.identity(float, 3)
+        # L_i = ti.Matrix.identity(float, 3)
         grad_v_i_tilde = grad_v_i_s_prime @ L_i.transpose() + (grad_v_i_b_prime  @ L_i.transpose()).trace() * ti.Matrix.identity(float, 3) / 3        
         V_i_prime = (grad_v_i_s_prime + grad_v_i_b_prime).trace() * ti.Matrix.identity(float, 3) / 3
         R_i_tilde = (grad_v_i_tilde - grad_v_i_tilde.transpose()) / 2 
@@ -136,7 +136,7 @@ class ElasticSolver:
         L_i = self.ps.correction_matrix[i]
         if self.ps.is_pseudo_L_i[i]:
             L_i = self.ps.pseudo_correction_matrix[i]
-        L_i = ti.Matrix.identity(float, 3)
+        # L_i = ti.Matrix.identity(float, 3)
         grad_v_i_tilde = grad_v_i_s_prime @ L_i.transpose() + (grad_v_i_b_prime  @ L_i.transpose()).trace() * ti.Matrix.identity(float, 3) / 3        
         V_i_prime = (grad_v_i_s_prime + grad_v_i_b_prime).trace() * ti.Matrix.identity(float, 3) / 3
         R_i_tilde = (grad_v_i_tilde - grad_v_i_tilde.transpose()) / 2 

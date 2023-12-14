@@ -57,4 +57,4 @@ def cubic_kernel_derivative_corrected(r, h, L) -> ti.Vector:
         else:
             f = 1.0 - q
             d_w = l * (-f * f) * grad_q
-    return d_w
+    return L @ d_w

@@ -273,7 +273,7 @@ class SnowSolver:
         w_ij = cubic_kernel_derivative(x_ij, self.ps.smoothing_radius)
         v_j = self.get_volume(j_idx)
 
-        res += (v_j * w_ij).outer_product(-1 * x_ij)
+        res += (v_j * w_ij).outer_product(-x_ij)
 
     @ti.func
     def aux_correction_matrix_b(self, i_idx, b_idx, res:ti.template()):
@@ -284,7 +284,7 @@ class SnowSolver:
         w_ib = cubic_kernel_derivative(x_ib, self.ps.smoothing_radius)
         V_b =  self.ps.boundary_particles_volume[b_idx]
 
-        res += (V_b * w_ib).outer_product(-1 * x_ib)
+        res += (V_b * w_ib).outer_product(-x_ib)
 
     @ti.func
     def compute_correction_matrix(self, i):
@@ -297,17 +297,25 @@ class SnowSolver:
             is given by (A^T @ A)^1.
             L_i is then Pseudo_i @ A^T_i (L_i can be directly used)
         '''
-        tmp_i = ti.Matrix.zero(dt=float, n=3, m=3)
-        self.ps.for_all_neighbors(i, self.aux_correction_matrix, tmp_i)
-        self.ps.for_all_b_neighbors(i, self.aux_correction_matrix_b, tmp_i)
+        use_svd = True
+        A = ti.Matrix.zero(dt=float, n=3, m=3)
+        self.ps.for_all_neighbors(i, self.aux_correction_matrix, A)
+        self.ps.for_all_b_neighbors(i, self.aux_correction_matrix_b, A)
 
-        det = ti.Matrix.determinant(tmp_i)
-        if det != 0: 
-            self.ps.correction_matrix[i] = tmp_i.inverse()
-        else: # no inverse 
-              # hence use the peudoinverse
-            pseudo = (tmp_i.transpose() * tmp_i).inverse()
-            self.ps.correction_matrix[i] = pseudo * tmp_i.transpose()
+        det = ti.Matrix.determinant(A)
+        if ti.abs(det) > 1e-5: # for stability 
+            # print("taking inverse of a possibly singular matrix")
+            self.ps.correction_matrix[i] = A.inverse()
+        else:
+            if use_svd:
+                U,S,V = ti.svd(A)
+                for k in range(self.ps.dim):
+                    if S[k,k] != 0.0:
+                        S[k,k] = 1.0 / S[k,k]
+                # print("decomposed", V @ S @ U.transpose())
+                self.ps.correction_matrix[i] = V * S * U.transpose()
+            else:
+                self.ps.correction_matrix[i] = (A@A + 1e-5 * ti.Matrix.identity(float, 3)).inverse() @ A
             
 
     @ti.func
@@ -431,7 +439,9 @@ class SnowSolver:
         self.ps.for_all_b_neighbors(i, self.helper_compute_velocity_gradient_b_uncorrected, grad_v_i_b_prime)
 
         L_i = self.ps.correction_matrix[i]
-        L_i = ti.Matrix.identity(float, 3)
+        # if(i[0] == 0):
+        #     print("Li", L_i)
+        # L_i = ti.Matrix.identity(float, 3)
         #if self.ps.is_pseudo_L_i[i]:
         #    L_i = self.ps.pseudo_correction_matrix[i]
         # if(i[0] == 0):
@@ -503,7 +513,7 @@ class SnowSolver:
             self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-5
             # print("before solve a")
             self.solve_a_lambda(deltaTime) # Step 6
-            # self.solve_a_G(deltaTime)             #Step 7 
+            self.solve_a_G(deltaTime)             #Step 7 
             self.integrate_velocity(deltaTime) # Step 8-9
             self.integrate_deformation_gradient(deltaTime) #Step 10-11
 
