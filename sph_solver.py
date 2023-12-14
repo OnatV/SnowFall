@@ -37,6 +37,7 @@ class SnowSolver:
         self.gamma_2 = ti.field(float, shape=self.ps.num_particles)
         self.elastic_solver = ElasticSolver(self.ps)
         self.pressure_solver = PressureSolver(self.ps)
+        self.a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
 
         self.adhesion_model = AdhesionModel(self.ps)
 
@@ -187,11 +188,11 @@ class SnowSolver:
         detF = ti.abs(ti.Matrix.determinant(self.ps.deformation_gradient[i]))
         density_i = 0.0
         self.ps.for_all_neighbors(i, self.calc_density, density_i)
-        self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
         self.ps.density[i] = density_i
         self.ps.rest_density[i] = self.ps.density[i] * detF
+        self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
         # Eq 21 from the paper, we use only the fluid particles to compute rest denstiy
-        # self.ps.density[i] = density_i
+        self.ps.density[i] = density_i
 
 
         # if i[0] == 0:
@@ -260,10 +261,9 @@ class SnowSolver:
         a_G, exit_code = solve_elastic(self.elastic_solver, deltaTime)
         if exit_code >= 0:
             a_G = a_G.reshape([self.ps.num_particles, 3])
-            a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
-            a_G_ti.from_numpy(a_G.astype(np.float32))
+            self.a_G_ti.from_numpy(a_G.astype(np.float32))
             for i in range(self.ps.num_particles):
-                self.ps.acceleration[i] += a_G_ti[i]
+                self.ps.acceleration[i] += self.a_G_ti[i]
         else:
             print("BiCGSTAB failed:", exit_code)
 
@@ -506,7 +506,7 @@ class SnowSolver:
     @ti.func
     def clamp_deformation_gradients(self, matrix):
         U, S, V = ti.svd(matrix)
-        S = ti.math.clamp(S, 1.0 - self.ps.theta_clamp_c, 1.0 + self.ps.theta_clamp_s)
+        S = ti.math.clamp(S, self.ps.theta_clamp_c, self.ps.theta_clamp_s)
         return V @ S @ V.transpose() ## This supposedly removes the rotation part
     
 
