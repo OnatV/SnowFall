@@ -23,6 +23,7 @@ class ParticleSystem:
         self.gravity = ti.Vector(self.cfg.gravity)
         self.temperature = -10.0 # degrees Celsuis
         self.m_k = np.pi * float(4/3) * self.particle_radius ** self.dim * self.init_density # particle mass
+        self.particle_spacing = self.cfg.particle_spacing
         # self.m_k = 0.008
         self.smoothing_radius = self.cfg.smoothing_radius_ratio * self.particle_radius
         # self.boundary_smoothing_radius = self.boundary_particle_radius * 4.0
@@ -92,8 +93,8 @@ class ParticleSystem:
 
         self.padding = 0.1 * self.grid_spacing
         # self.boundary_particle_spacing = self.boundary_particle_radius # important quantity for figuring out boundary volume
-        
-        self.handle_boundary_objects()
+        # if self.object_paths is not None:
+        self.import_boundary_objects()
         
         self.velocity_star = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles) #@@
 
@@ -109,7 +110,7 @@ class ParticleSystem:
         ])
         self.colors = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
 
-    def handle_boundary_objects(self):
+    def import_boundary_objects(self):
         pos_tmp = []
         self.boundary_objects = []
         # offsets to later retrieve the particles of object i
@@ -169,22 +170,22 @@ class ParticleSystem:
     @ti.kernel
     def initialize_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template()):
         # print("Block length", block_length)
-        # block_position = origin
-        # positions = ti.Vector.field(3, dtype=float, shape=int(len_x / self.particle_radius) * int(len_z / self.particle_radius) * int(len_y / self.particle_radius))
+        print((int(len_x / self.particle_spacing)), int(len_y / self.particle_spacing), int(len_z / self.particle_spacing))
         for i in range(self.num_particles):
             self.position[i] = ti.Vector([0.0, 0.0, 0.0])
-        for i in range(int(len_x / self.particle_radius)):
-            for j in range(int(len_z / self.particle_radius)):
-                for k in range(int(len_y / self.particle_radius)):
-                    x = i * (self.particle_radius) + origin[0]
-                    y = j * (self.particle_radius) + origin[2]
-                    z = k * (self.particle_radius) + origin[1]
-                    self.position[int(k * (len_x / self.particle_radius) * (len_z / self.particle_radius) + j * (len_x / self.particle_radius) + i)] = ti.Vector([x, z, y])
+        for i in range(int((len_x / self.particle_spacing))):
+            for j in range(int((len_z / self.particle_spacing))):
+                for k in range(int((len_y / self.particle_spacing))):
+                    x = i * (self.particle_spacing) + origin[0]
+                    y = j * (self.particle_spacing) + origin[2]
+                    z = k * (self.particle_spacing) + origin[1]
+                    self.position[int(k * (len_x / self.particle_spacing) * (len_z / self.particle_spacing) + j * (len_x / self.particle_spacing) + i)] = ti.Vector([x, z, y])
     @ti.kernel
     def initialize_boundary_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template()):
-        # print("Block length", block_length)
+        print("Boundary Block length", len_x)
         # block_position = origin
         # positions = ti.Vector.field(3, dtype=float, shape=int(len_x / self.particle_radius) * int(len_z / self.particle_radius) * int(len_y / self.particle_radius))
+        print((int(len_x / self.boundary_particle_radius)), int(len_y / self.boundary_particle_radius), int(len_z / self.boundary_particle_radius))
         for i in range(self.num_particles):
             self.boundary_particles[i] = ti.Vector([0.0, 0.0, 0.0])
         for i in range(int(len_x / self.boundary_particle_radius)):

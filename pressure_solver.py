@@ -98,7 +98,7 @@ class PressureSolver:
         self.ps.for_all_neighbors(i, self.helper_ViVj, ViVj)
         self.ps.for_all_neighbors(i, self.helper_Vj, Vj)
         self.ps.for_all_b_neighbors(i, self.helper_Vb, Vb)
-        self.ps.jacobian_diagonal[i] = p_lame - deltaTime2 * ViVj - deltaTime2 * (Vj + self.ps.m_psi * Vb).dot(Vj + Vb)
+        self.ps.jacobian_diagonal[i] = p_lame - deltaTime2 * ViVj - deltaTime2 * (Vj + self.ps.rest_density[i] * Vb).dot(Vj + Vb)
 
     @ti.kernel
     def implicit_solver_prepare(self, deltaTime: float):
@@ -125,7 +125,8 @@ class PressureSolver:
         is_solved = False
         it = 0
         eta = 0.01 * 0.1 * self.ps.avg_rest_density[0]
-        print("eta", eta)
+        print("density", self.ps.density[0])
+        print("rest_density", self.ps.rest_density[0])
         while ( (not is_solved or it < min_iterations) and it < max_iterations):
             it = it + 1
             avg_density_error = self.implicit_pressure_solver_step(deltaTime)
@@ -145,7 +146,7 @@ class PressureSolver:
                 is_solved = True
             else:
                 is_solved = False
-        self.update_pressure_gradient()
+        # self.update_pressure_gradient()
         return is_solved       
 
     @ti.kernel

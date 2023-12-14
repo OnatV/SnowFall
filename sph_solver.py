@@ -97,7 +97,7 @@ class SnowSolver:
 
     @ti.kernel
     def compute_boundary_volumes(self):
-        correction = 1.8
+        correction = 0.8
         for i in range(self.ps.num_b_particles):
             kernel_sum = 0.0
             for j in range(self.ps.num_b_particles):
@@ -145,7 +145,7 @@ class SnowSolver:
 
         for i in range(self.ps.num_particles):
             self.ps.velocity[i] = self.ps.velocity[i] + (deltaTime * self.ps.acceleration[i])
-
+            # self.ps.velocity[i] = self.ps.velocity[i] / self.ps.velocity[i].norm()
     @ti.kernel
     def update_position(self, deltaTime: float):
         for i in range(self.ps.num_particles):
@@ -185,9 +185,8 @@ class SnowSolver:
         density_i = 0.0
         self.ps.for_all_neighbors(i, self.calc_density, density_i)
         self.ps.density[i] = density_i
-        self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
-
         self.ps.rest_density[i] = self.ps.density[i] * detF
+        self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
         # Eq 21 from the paper, we use only the fluid particles to compute rest denstiy
         self.ps.density[i] = density_i
 
@@ -200,7 +199,7 @@ class SnowSolver:
         '''
             Step 2 : Eq 20 from the paper, part1
         '''
-        rnorm = ti.Vector.norm(self.ps.position[i_idx] - self.ps.position[j_idx])
+        rnorm = ti.Vector.norm(self.ps.position[i_idx] - self.ps.position[j_idx]) 
         d += cubic_kernel(rnorm, self.ps.smoothing_radius) * self.ps.m_k
 
     @ti.func
@@ -216,29 +215,7 @@ class SnowSolver:
     def get_volume(self, i):
         return (self.ps.m_k / ti.math.max(self.ps.density[i], self.numerical_eps ) )
 
-    @ti.func
-    def helper_a_lambda_fluid_neighbors(self, i, j, sum:ti.template()):
-        Vj = self.get_volume(j)
-        density_i = self.ps.density[i] / self.ps.rest_density[i]
-        density_i2 = density_i * density_i
-        dpi = self.ps.pressure[i] / (self.ps.rest_density[i] * density_i2)
-        density_j = self.ps.density[j] / self.ps.rest_density[j]
-        density_j2 = density_j * density_j
-        dpj = (self.ps.pressure[j] / self.ps.rest_density[j]) / density_j2
-        sum -= Vj * (dpi + self.ps.rest_density[j] / self.ps.rest_density[i] * dpj) * cubic_kernel_derivative(
-            self.ps.position[i] - self.ps.position[j], self.ps.smoothing_radius
-        )
-
-    @ti.func 
-    def helper_a_lambda_b(self, i, j, sum: ti.template()):
-        density_i = self.ps.density[i]
-        density_i2 = density_i * density_i
-        dpi = self.ps.pressure[i] / (density_i2)
-        a = self.ps.rest_density[i] * self.ps.boundary_particles_volume[j] * dpi * cubic_kernel_derivative(
-            self.ps.position[i] - self.ps.boundary_particles[j], self.ps.smoothing_radius
-        )
-        sum -= a
-    
+  
     @ti.kernel
     def compute_a_lambda(self, success : ti.template()):
         for i in ti.grouped(self.ps.position):
@@ -248,15 +225,9 @@ class SnowSolver:
             ti.math.isnan(self.ps.pressure[i]) or \
             self.ps.rest_density[i] == 0.0:
                 a_lambda = ti.Vector([0.0, 0.0, 0.0])
-            else:
-                # self.ps.for_all_neighbors(i, self.helper_a_lambda_fluid_neighbors, a_lambda)
-                # self.ps.for_all_b_neighbors(i, self.helper_a_lambda_b, a_lambda)
-                
+            else:                
                 a_lambda = -1.0 / self.ps.density[i] * self.ps.pressure_gradient[i]
-            # a_lambda = ti.Vector([0.0, 9.81, 0.0])
             self.ps.acceleration[i] += a_lambda
-            # if i[0] == 0:
-            #     print("a_lambda", a_lambda)
     
     @ti.func
     def nan_check(self) -> bool:
@@ -460,6 +431,7 @@ class SnowSolver:
         self.ps.for_all_b_neighbors(i, self.helper_compute_velocity_gradient_b_uncorrected, grad_v_i_b_prime)
 
         L_i = self.ps.correction_matrix[i]
+        L_i = ti.Matrix.identity(float, 3)
         #if self.ps.is_pseudo_L_i[i]:
         #    L_i = self.ps.pseudo_correction_matrix[i]
         # if(i[0] == 0):
@@ -531,7 +503,7 @@ class SnowSolver:
             self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-5
             # print("before solve a")
             self.solve_a_lambda(deltaTime) # Step 6
-            #self.solve_a_G(deltaTime)             #Step 7 
+            self.solve_a_G(deltaTime)             #Step 7 
             self.integrate_velocity(deltaTime) # Step 8-9
             self.integrate_deformation_gradient(deltaTime) #Step 10-11
 
