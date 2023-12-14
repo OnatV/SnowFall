@@ -105,7 +105,7 @@ class SnowSolver:
                 if i == j: continue
                 if (self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm() > self.ps.smoothing_radius: continue
                 kernel_sum += cubic_kernel((self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm(), self.ps.smoothing_radius)
-            # self.ps.boundary_particles_volume[i] = 0.8 * self.ps.boundary_particle_radius ** 3 * (1.0 / kernel_sum)
+            # self.ps.boundary_particles_volume[i] = 0.8 * (2 * self.ps.boundary_particle_radius ** 3) * (1.0 / kernel_sum)
             self.ps.boundary_particles_volume[i] = correction * (1.0 / kernel_sum)
             
 
@@ -503,7 +503,7 @@ class SnowSolver:
             self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-5
             # print("before solve a")
             self.solve_a_lambda(deltaTime) # Step 6
-            self.solve_a_G(deltaTime)             #Step 7 
+            # self.solve_a_G(deltaTime)             #Step 7 
             self.integrate_velocity(deltaTime) # Step 8-9
             self.integrate_deformation_gradient(deltaTime) #Step 10-11
 
