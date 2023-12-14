@@ -36,6 +36,7 @@ class SnowSolver:
         self.gamma_2 = ti.field(float, shape=self.ps.num_particles)
         self.elastic_solver = ElasticSolver(self.ps)
         self.pressure_solver = PressureSolver(self.ps)
+        self.a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
 
     @ti.func
     def helper_sum_kernel(self, i, j, sum:ti.template()):
@@ -257,10 +258,9 @@ class SnowSolver:
         a_G, exit_code = solve_elastic(self.elastic_solver, deltaTime)
         if exit_code >= 0:
             a_G = a_G.reshape([self.ps.num_particles, 3])
-            a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
-            a_G_ti.from_numpy(a_G.astype(np.float32))
+            self.a_G_ti.from_numpy(a_G.astype(np.float32))
             for i in range(self.ps.num_particles):
-                self.ps.acceleration[i] += a_G_ti[i]
+                self.ps.acceleration[i] += self.a_G_ti[i]
         else:
             print("BiCGSTAB failed:", exit_code)
 
