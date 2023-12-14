@@ -155,3 +155,63 @@ class FluidGrid:
                 p_j = self.grid[current_arr, j] # Get point idx
                 if (position - b_positions[p_j]).norm() < h:
                     func(i, p_j, ret)
+
+
+@ti.data_oriented
+class FakeGrid:
+    def __init__(self,
+        grid_start, 
+        grid_end,
+        grid_spacing
+    ):
+        self.grid_start = grid_start
+        self.grid_end = grid_end
+        self.grid_spacing = grid_spacing
+    
+    @ti.func
+    def for_all_neighbors(self, i, positions: ti.template(), func : ti.template(), ret : ti.template(), h):
+        '''
+            param: i index of particle
+            param: pos position of particle i
+            param: func function to be evaluated
+            param: ret return value
+        '''
+
+        ###Iterate over all neighbours of grid cell i
+
+        for j in ti.grouped(ti.ndrange( positions.shape[0] ) ):
+            if (positions[i] - positions[j[0]]).norm_sqr() <= h*h:
+                func(i, j, ret)
+    
+    @ti.func
+    def for_all_b_neighbors(self, i, position: ti.template(), b_positions: ti.template(), func : ti.template(), ret : ti.template(), h):
+        '''
+            to be used for computing boundary particles contributing to fluid particless
+        '''
+        for j in ti.grouped(ti.ndrange( b_positions.shape[0] ) ):
+            if (position - b_positions[j]).norm_sqr() <= h*h:
+                func(i, j, ret)
+
+    @ti.func
+    def for_all_b_neighbors_vec3(self, i, position: ti.template(), b_positions: ti.template(), func : ti.template(), ret : vec3, h):
+        ###Iterate over all neighbours of grid cell i
+
+        for j in ti.grouped(ti.ndrange( b_positions.shape[0] ) ):
+            if (position - b_positions[j[0]]).norm_sqr() <= h*h:
+                func(i, j, ret)
+
+    @ti.func
+    def for_all_neighbors_vec3(self, i, positions: ti.template(), func : ti.template(), ret : vec3, h):
+        '''
+            param: i index of particle
+            param: pos position of particle i
+            param: func function to be evaluated
+            param: ret return value
+        '''
+        for j in ti.grouped(ti.ndrange( positions.shape[0] ) ):
+            if (positions[i] - positions[j[0]]).norm_sqr() <= h*h:
+                func(i, j, ret)
+
+    @ti.kernel
+    def update_grid(self, particles:ti.template()):
+        pass

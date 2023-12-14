@@ -36,8 +36,8 @@ class AdhesionModel:
     def compute_adhesion_force(self, i_idx: ti.template()):
         res = ti.Vector([0.0, 0.0, 0.0])
         self.ps.for_all_b_neighbors(i_idx, self.compute_adh_i_b, res)
-        if i_idx[0] == 0:
-            print("adhesion force:" , res)   
+        # if i_idx[0] == 0:
+        #     print("adhesion force:" , res)   
         self.ps.acceleration[i_idx] += res
 
         

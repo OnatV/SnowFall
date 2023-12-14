@@ -33,6 +33,8 @@ class PressureSolver:
         # now compute Ap
         A_p = -self.ps.rest_density[i] / ti.math.max(self.ps.lambda_t_i[i], self.numerical_eps) * self.ps.pressure[i] + deltaTime2 * self.ps.pressure_laplacian[i]
         aii = self.ps.jacobian_diagonal[i]
+        if ti.math.isnan(aii[0]): print(f"aii is nan at {i}")
+        if ti.math.isnan(A_p): print(f"A_p is nan at {i}")
         residuum = self.ps.rest_density[i] - self.ps.p_star[i] - A_p
         pi = (0.5 / (ti.math.sign(aii) * ti.math.max(ti.abs(aii), self.numerical_eps))) * residuum
         self.ps.pressure[i] += pi[0]
@@ -91,7 +93,10 @@ class PressureSolver:
     @ti.func
     def compute_jacobian_diagonal_entry(self, i, deltaTime):
         # psi = 1.5 # this is a parameter that was set in the paper
-        p_lame =  -self.ps.rest_density[i] / self.ps.lambda_t_i[i]
+        ##Lambda sometimes becomes 0, this might be a bug as well
+        p_lame =  -self.ps.rest_density[i] / ti.max(self.ps.lambda_t_i[i], self.numerical_eps )
+
+        if ti.math.isnan(p_lame): print(f"p_lame is nan at {i} and {self.ps.lambda_t_i[i]}")
         deltaTime2 = deltaTime * deltaTime       
         ViVj = 0.0
         Vj = ti.Vector([0.0, 0.0, 0.0])
@@ -144,16 +149,19 @@ class PressureSolver:
             if it > 1: current_deviation = prev_avg_density_error - avg_density_error
                 
             if it > 2 :
-                if current_deviation < (prev_deviation) * 0.001 :
+                if current_deviation <= (prev_deviation) * 0.001 :
                     is_solved = True
-                    print(f"Took {it} iterations to solve lambda, avg_density_error: {avg_density_error}, prev_avg_density_error: {prev_avg_density_error}, prev_deviation: {prev_deviation}")
-                    print("avg_errors", avg_errors)
+                    print(f"Took {it} iterations to solve lambda")
+                    # print("avg_errors", avg_errors)
                 else:
                     is_solved = False
-                                        
 
             prev_deviation = current_deviation  
             prev_avg_density_error = avg_density_error
+
+            if it == max_iterations and not is_solved:
+                print("failed to solve after max iterations")
+                print("avg_errors", avg_errors)
 
             # print("-----ITERATION", it,"---------")
             # print("avg_density_error", avg_density_error)

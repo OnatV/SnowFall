@@ -4,7 +4,7 @@ import configparser
 
 from time import time_ns
 from snow_config import SnowConfig
-from fluid_grid import FluidGrid
+from fluid_grid import FluidGrid, FakeGrid
 vec3 = ti.types.vector(3, float)
 
 @ti.data_oriented
@@ -87,8 +87,9 @@ class ParticleSystem:
 
         self.friction_diagonal = ti.Vector.field(1, dtype=float, shape=self.num_particles)
 
-        self.fluid_grid = FluidGrid(self.domain_start, self.domain_end, self.smoothing_radius)
-        self.b_grid = FluidGrid(self.domain_start, self.domain_end, self.smoothing_radius)
+        self.fluid_grid = FakeGrid(self.domain_start, self.domain_end, self.smoothing_radius)
+        self.b_grid = FakeGrid(self.domain_start, self.domain_end, self.smoothing_radius)
+
 
 
         self.padding = 0.1 * self.grid_spacing

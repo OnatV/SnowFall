@@ -172,7 +172,11 @@ class SnowSolver:
         p_0 = self.ps.init_density
         k = numerator / denom
         self.ps.lambda_t_i[i] = k * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
+
+        if self.ps.lambda_t_i[i] < self.numerical_eps: print(f"lambda t_i is 0 at {i} because of {self.ps.rest_density[i]}, {k}")
+
         self.ps.G_t_i[i] = (young_mod * nu) / (2 * (1 + nu)) * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
+        # if ti.math.isnan(self.ps.lambda_t_i[i]): print(f"lambda t_i is nan at {i} at init")
         # if (i[0] == 0):
             # print("self.ps.lambda_t_i[i]", self.ps.lambda_t_i[i])
 
@@ -188,12 +192,18 @@ class SnowSolver:
         detF = ti.abs(ti.Matrix.determinant(self.ps.deformation_gradient[i]))
         density_i = 0.0
         self.ps.for_all_neighbors(i, self.calc_density, density_i)
+
+        # Eq 21 from the paper, we use only the fluid particles to compute rest denstiy
+        # if density_i > self.numerical_eps:
         self.ps.density[i] = density_i
         self.ps.rest_density[i] = self.ps.density[i] * detF
+
         self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
-        # Eq 21 from the paper, we use only the fluid particles to compute rest denstiy
+
+        # if density_i > self.numerical_eps:
         self.ps.density[i] = density_i
 
+        if self.ps.density[i] < self.numerical_eps or self.ps.rest_density[i] < self.numerical_eps : print(f"Density for {i} is {self.ps.density[i]}, rest density {self.ps.rest_density[i]}")
 
         # if i[0] == 0:
             # print("density", density_i)
@@ -332,7 +342,6 @@ class SnowSolver:
     @ti.func
     def compute_adhesion(self,i):
         self.adhesion_model.compute_adhesion_force(i)
-        pass
 
 
     @ti.func
@@ -370,15 +379,17 @@ class SnowSolver:
             sum_term = ti.Vector([0.0, 0.0, 0.0], dt = float)
             self.ps.for_all_b_neighbors(i, self.helper_compute_accel_friction, sum_term)
             
-            denom = self.ps.friction_diagonal[i][0] * deltaTime
-            nom = self.ps.velocity[i] + (deltaTime * self.ps.acceleration[i]) - deltaTime * self.friction_coef * sum_term 
-            accel_friciton =  nom / ti.max(denom, self.numerical_eps)
+            # denom = self.ps.friction_diagonal[i][0] * deltaTime
+            # nom = self.ps.velocity[i] + (deltaTime * self.ps.acceleration[i]) - deltaTime * self.friction_coef * sum_term 
+            # accel_friciton =  nom / ti.max(denom, self.numerical_eps)
             
-            if i[0] == 0:
-                print("NOm term in accel friction", nom, "vel", self.ps.velocity[i], "accel", self.ps.acceleration[i])
-                print('denom term in accel friction', denom, "diag", self.ps.friction_diagonal[i][0])
-                print("sum term in accel friction", sum_term)
+            # if i[0] == 0:
+            #     print("NOm term in accel friction", nom, "vel", self.ps.velocity[i], "accel", self.ps.acceleration[i])
+            #     print('denom term in accel friction', denom, "diag", self.ps.friction_diagonal[i][0])
+            #     print("sum term in accel friction", sum_term)
 
+            accel_friciton = self.ps.velocity[i]/ deltaTime + self.ps.acceleration[i] -  self.friction_coef * sum_term
+            accel_friciton /= self.ps.friction_diagonal[i][0]
         if i[0] == 0:
             print("accel_friciton", accel_friciton)
         self.ps.acceleration[i] += accel_friciton
@@ -391,8 +402,8 @@ class SnowSolver:
         '''
         sum_term = 0.0
         self.ps.for_all_b_neighbors(i, self.helper_compute_friction_diagonal, sum_term)
-        # self.ps.friction_diagonal[i] = 1 - deltaTime * self.friction_coef * sum_term
-        self.ps.friction_diagonal[i] = 1 - self.friction_coef * sum_term
+        self.ps.friction_diagonal[i] = 1 - deltaTime * self.friction_coef * sum_term
+
 
     @ti.func
     def helper_compute_friction_diagonal(self, i_idx, b_idx, sum:ti.template()):
@@ -405,9 +416,9 @@ class SnowSolver:
         grad_kernel_ib = cubic_kernel_derivative(
             x_ib, self.ps.smoothing_radius
         )
-
-        denom = (x_ib.norm_sqr() + 0.01 * self.h * self.h)
-        sum += self.ps.boundary_particles_volume[b_idx] * x_ib.dot(grad_kernel_ib) / denom
+        L_i = self.ps.correction_matrix[i_idx]
+        denom = x_ib.norm_sqr() + (0.01 * self.h * self.h)
+        sum += (self.ps.boundary_particles_volume[b_idx] * x_ib.dot(L_i @ grad_kernel_ib)) / denom
 
 
 
@@ -461,7 +472,7 @@ class SnowSolver:
         self.ps.for_all_b_neighbors(i, self.helper_compute_velocity_gradient_b_uncorrected, grad_v_i_b_prime)
 
         L_i = self.ps.correction_matrix[i]
-        L_i = ti.Matrix.identity(float, 3)
+        # L_i = ti.Matrix.identity(float, 3)
         #if self.ps.is_pseudo_L_i[i]:
         #    L_i = self.ps.pseudo_correction_matrix[i]
         # if(i[0] == 0):
