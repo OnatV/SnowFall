@@ -209,7 +209,6 @@ class ParticleSystem:
     # simple helper to initialize deformation gradient as the identity
     @ti.kernel
     def gradient_initialize(self):
-        # mat = ti.Matrix(m=3, n=3, dtype=float)
         for i in range(self.num_particles):
             self.deformation_gradient[i] = ti.Matrix.identity(float, 3)
 
@@ -234,16 +233,15 @@ class ParticleSystem:
             self.pressure[i] = 0.0
             self.colors[i] = ti.Vector([1.0, 1.0, 1.0])
             
-        # init boundary colors
-        for i in range(self.num_b_particles):
-            self.boundary_colors[i] = ti.Vector([1.0, 1.0, 1.0])
 
         boundary_origin = ti.field(float, 3)
         boundary_origin.from_numpy(self.cfg.boundary_origin)
         self.initialize_boundary_particle_block(self.cfg.boundary_length, self.cfg.boundary_height, self.cfg.boundary_width, boundary_origin)
-        self.b_grid.update_grid(self.boundary_particles)
         self.boundary_velocity_initialize()
         self.gradient_initialize()
+        # init boundary colors
+        for i in range(self.num_b_particles):
+            self.boundary_colors[i] = ti.Vector([1.0, 1.0, 1.0])
         print("Intialized!")
 
     @ti.kernel
