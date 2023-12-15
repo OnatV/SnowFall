@@ -455,8 +455,16 @@ class SnowSolver:
         for i in ti.grouped(self.ps.position):
             self.compute_accel_ext(i) #Step 4
 
-        # for i in ti.grouped(self.ps.position):   
-        #     self.compute_accel_friction(i, deltaTime) #Step 5
+    @ti.kernel
+    def comput_friction(self, deltaTime : float):
+        '''
+            Computes for loop 1 in Algorithm 1 in the paper.  Part3
+            Steps:
+                Step 4 : self.compute_accel_ext(i)
+                Step 5 : self.compute_accel_friction(i)
+        '''
+        for i in ti.grouped(self.ps.position):   
+            self.compute_accel_friction(i, deltaTime) #Step 5
 
 
     @ti.kernel
@@ -554,7 +562,8 @@ class SnowSolver:
 
             # these functions should update the acceleration field of the particles
             self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-3
-            self.compute_external_forces(deltaTime) # Step 1, includes Steps 4-5
+            self.compute_external_forces(deltaTime) # Step 1, includes Steps 4
+            self.comput_friction(deltaTime) # Step 1, includes Steps 5
 
             # print("before solve a")
             self.solve_a_lambda(deltaTime) # Step 6
