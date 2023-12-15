@@ -33,8 +33,8 @@ class PressureSolver:
         # now compute Ap
         A_p = -self.ps.rest_density[i] / ti.math.max(self.ps.lambda_t_i[i], self.numerical_eps) * self.ps.pressure[i] + deltaTime2 * self.ps.pressure_laplacian[i]
         aii = self.ps.jacobian_diagonal[i]
-        if ti.math.isnan(aii[0]): print(f"aii is nan at {i}")
-        if ti.math.isnan(A_p): print(f"A_p is nan at {i}")
+        # if ti.math.isnan(aii[0]): print(f"aii is nan at {i}")
+        # if ti.math.isnan(A_p): print(f"A_p is nan at {i}")
         residuum = self.ps.rest_density[i] - self.ps.p_star[i] - A_p
         pi = (0.5 / (ti.math.sign(aii) * ti.math.max(ti.abs(aii), self.numerical_eps))) * residuum
         self.ps.pressure[i] += pi[0]
@@ -96,7 +96,7 @@ class PressureSolver:
         ##Lambda sometimes becomes 0, this might be a bug as well
         p_lame =  -self.ps.rest_density[i] / ti.max(self.ps.lambda_t_i[i], self.numerical_eps )
 
-        if ti.math.isnan(p_lame): print(f"p_lame is nan at {i} and {self.ps.lambda_t_i[i]}")
+        # if ti.math.isnan(p_lame): print(f"p_lame is nan at {i} and {self.ps.lambda_t_i[i]}")
         deltaTime2 = deltaTime * deltaTime       
         ViVj = 0.0
         Vj = ti.Vector([0.0, 0.0, 0.0])
@@ -116,7 +116,7 @@ class PressureSolver:
             self.ps.p_star[i] = 0
             self.ps.pressure[i] = 0
             self.ps.jacobian_diagonal[i] = 0
-            self.ps.velocity_star[i] = self.ps.velocity[i] + deltaTime * self.ps.acceleration[i] ##Replace LATER@@ Acceleration includes aother and a friction
+            self.ps.velocity_star[i] = self.ps.velocity[i] + deltaTime * self.ps.acceleration[i]
 
         for i in ti.grouped(self.ps.position):
             velocity_div = 0.0
@@ -151,7 +151,7 @@ class PressureSolver:
             if it > 2 :
                 if current_deviation <= (prev_deviation) * 0.001 :
                     is_solved = True
-                    print(f"Took {it} iterations to solve lambda")
+                    # print(f"Took {it} iterations to solve lambda")
                     # print("avg_errors", avg_errors)
                 else:
                     is_solved = False
