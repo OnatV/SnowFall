@@ -157,7 +157,6 @@ class SnowSolver:
             self.ps.position[i] = self.ps.position[i] + deltaTime * self.ps.velocity[i]
 
     
-
     @ti.func
     def compute_lame_parameters(self,i):
         '''
@@ -205,7 +204,7 @@ class SnowSolver:
         self.ps.density[i] =  density_by_boundary + self.ps.rest_density[i] / detF
 
 
-        if self.ps.density[i] < self.numerical_eps or self.ps.rest_density[i] < self.numerical_eps : print(f"Density for {i} is {self.ps.density[i]}, rest density {self.ps.rest_density[i]}")
+        # if self.ps.density[i] < self.numerical_eps or self.ps.rest_density[i] < self.numerical_eps : print(f"Density for {i} is {self.ps.density[i]}, rest density {self.ps.rest_density[i]}")
 
         # if i[0] == 0:
             # print("density", density_i)

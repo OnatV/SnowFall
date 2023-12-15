@@ -42,13 +42,13 @@ class ParticleSystem:
         self.object_scales = self.cfg.object_scales
         self.object_pos = self.cfg.object_pos
 
-        self.create_grids(self.cfg)
+
         # allocate memory
         self.allocate_fields()
+        self.create_grids(self.cfg)
         self.import_boundary_objects()
         self.initialize_fields()
-        
-        print("Creating Grid")
+
         self.update_grid()
         self.update_boundary_grid()
         # init once as long as boundaries are static
@@ -65,7 +65,7 @@ class ParticleSystem:
         self.initalize_domain_viz()
 
     def create_grids(self, cfg: SnowConfig):
-        if cfg.grid_type == "fluid":
+        if ti.static(cfg.grid_type == "fluid"):
             print("Creating fluid grid")
             self.fluid_grid = FluidGrid(self.domain_start, self.domain_end, self.smoothing_radius)
             self.b_grid = FluidGrid(self.domain_start, self.domain_end, self.smoothing_radius)
@@ -212,14 +212,26 @@ class ParticleSystem:
 
     # simple helper to initialize deformation gradient as the identity
     @ti.kernel
-    def gradient_initialize(self):
+    def initialize_physical_quantities(self):
         for i in range(self.num_particles):
+            self.pressure[i] = 0.0
             self.deformation_gradient[i] = ti.Matrix.identity(float, 3)
 
     @ti.kernel
     def boundary_velocity_initialize(self):
         for i in range(self.num_b_particles):
             self.boundary_velocity[i] = ti.Vector([0.0, 0.0, 0.0])
+
+    @ti.kernel
+    def color_initialize(self):
+        # initialize starting quantities
+        for i in range(self.num_particles):
+            self.colors[i] = ti.Vector([1.0, 1.0, 1.0])
+
+        # init boundary colors
+        for i in range(self.num_b_particles):
+            self.boundary_colors[i] = ti.Vector([1.0, 1.0, 1.0])
+
 
     def initialize_fields(self):
         print("initializing particle positions...")
@@ -231,21 +243,14 @@ class ParticleSystem:
             pass
         else:
             self.initialize_random_particles()
-        self.fluid_grid.update_grid(self.position)
-        # initialize starting quantities
-        for i in range(self.num_particles):
-            self.pressure[i] = 0.0
-            self.colors[i] = ti.Vector([1.0, 1.0, 1.0])
             
 
         boundary_origin = ti.field(float, 3)
         boundary_origin.from_numpy(self.cfg.boundary_origin.astype(np.float32) )
         self.initialize_boundary_particle_block(self.cfg.boundary_length, self.cfg.boundary_height, self.cfg.boundary_width, boundary_origin)
         self.boundary_velocity_initialize()
-        self.gradient_initialize()
-        # init boundary colors
-        for i in range(self.num_b_particles):
-            self.boundary_colors[i] = ti.Vector([1.0, 1.0, 1.0])
+        self.initialize_physical_quantities()
+        self.color_initialize()
         print("Intialized!")
 
     @ti.kernel

@@ -11,7 +11,7 @@ from sph_solver import SnowSolver
 profDir = "./profiling"
 
 # settings
-ARCH = "cpu" if "cpu" in argv else "gpu"
+ARCH = "cpu" #if "cpu" in argv else "gpu"
 proftype = "taichi" if "taichi" in argv else "cprof"
 
 
