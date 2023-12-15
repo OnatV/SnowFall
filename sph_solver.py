@@ -316,7 +316,8 @@ class SnowSolver:
                 self.ps.correction_matrix[i] = V * S * U.transpose()
             else:
                 self.ps.correction_matrix[i] = (A@A + 1e-5 * ti.Matrix.identity(float, 3)).inverse() @ A
-            
+        if i[0] == 0:
+            print(self.ps.correction_matrix[i])
 
     @ti.func
     def compute_accel_ext(self, i):
@@ -506,7 +507,7 @@ class SnowSolver:
             self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-5
             # print("before solve a")
             self.solve_a_lambda(deltaTime) # Step 6
-            # self.solve_a_G(deltaTime)             #Step 7 
+            self.solve_a_G(deltaTime)             #Step 7 
             self.integrate_velocity(deltaTime) # Step 8-9
             self.integrate_deformation_gradient(deltaTime) #Step 10-11
 
