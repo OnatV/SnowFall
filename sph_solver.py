@@ -306,8 +306,18 @@ class SnowSolver:
             self.ps.correction_matrix[i] = tmp_i.inverse()
         else: # no inverse 
               # hence use the peudoinverse
-            pseudo = (tmp_i.transpose() * tmp_i).inverse()
-            self.ps.correction_matrix[i] = pseudo * tmp_i.transpose()
+            # thanks wikipedia
+            # https://en.wikipedia.org/wiki/Moore%E2%80%93Penrose_inverse#Singular_value_decomposition_(SVD)
+            U, S, V = ti.svd(tmp_i)
+            print("S", S[0,0], S[1,1], S[2,2])
+            threshold = self.numerical_eps * 3 * 0.01
+            for i in ti.static(range(3)):
+                if S[i, i] > threshold:
+                    S[i, i] = 1.0 / S[i, i]
+                else:
+                    S[i, i] = 0.0
+            self.ps.correction_matrix[i] = V @ S @ U.transpose()
+            
             
 
     @ti.func
@@ -431,7 +441,6 @@ class SnowSolver:
         self.ps.for_all_b_neighbors(i, self.helper_compute_velocity_gradient_b_uncorrected, grad_v_i_b_prime)
 
         L_i = self.ps.correction_matrix[i]
-        L_i = ti.Matrix.identity(float, 3)
         #if self.ps.is_pseudo_L_i[i]:
         #    L_i = self.ps.pseudo_correction_matrix[i]
         # if(i[0] == 0):
