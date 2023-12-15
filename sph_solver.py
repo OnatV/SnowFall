@@ -506,7 +506,7 @@ class SnowSolver:
             self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-5
             # print("before solve a")
             self.solve_a_lambda(deltaTime) # Step 6
-            self.solve_a_G(deltaTime)             #Step 7 
+            # self.solve_a_G(deltaTime)             #Step 7 
             self.integrate_velocity(deltaTime) # Step 8-9
             self.integrate_deformation_gradient(deltaTime) #Step 10-11
 
