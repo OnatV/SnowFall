@@ -89,11 +89,11 @@ This pseudocode is already layed out in [SnowSolver.substep](sph_solver.py)
     - ~~fixing the camera lookat - Jackson~~
 - implement desired target
     - ~~compute full a_other term~~
-    - compute a_friction
+    - ~~compute a_friction~~ Needs some debugging
 - Nice to have:
     - ~~saving to output~~
-    - Config parser
-    - Skybox/shading : Jackson
+    - ~~Config parser~~
+    - ~~kybox/shading : Jackson~~
 - ~~Logger~~
 - 
 
