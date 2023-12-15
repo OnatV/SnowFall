@@ -297,7 +297,7 @@ class SnowSolver:
             is given by (A^T @ A)^1.
             L_i is then Pseudo_i @ A^T_i (L_i can be directly used)
         '''
-        use_svd = True
+        use_svd = False
         A = ti.Matrix.zero(dt=float, n=3, m=3)
         self.ps.for_all_neighbors(i, self.aux_correction_matrix, A)
         self.ps.for_all_b_neighbors(i, self.aux_correction_matrix_b, A)
@@ -439,13 +439,6 @@ class SnowSolver:
         self.ps.for_all_b_neighbors(i, self.helper_compute_velocity_gradient_b_uncorrected, grad_v_i_b_prime)
 
         L_i = self.ps.correction_matrix[i]
-        # if(i[0] == 0):
-        #     print("Li", L_i)
-        # L_i = ti.Matrix.identity(float, 3)
-        #if self.ps.is_pseudo_L_i[i]:
-        #    L_i = self.ps.pseudo_correction_matrix[i]
-        # if(i[0] == 0):
-        #     print("---LI---", L_i)
         ##In the Paragraph between Eq17 and Eq18
         grad_v_i_tilde = grad_v_i_s_prime @ L_i.transpose() + (grad_v_i_b_prime  @ L_i.transpose()).trace() * ti.Matrix.identity(float, 3) / 3
         
