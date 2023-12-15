@@ -52,7 +52,10 @@ class SnowConfig:
         self.grid_max_particles_per_cell = int(config['SIMULATION']['max_particles_per_cell']) ##Needed because taichi doesn't support dynamic arrays well, can be decreased if grid spacing is decreased        
         # # values from paper
         self.initialize_type = config['SIMULATION']['initialize_type']
+        self.grid_type = config['SIMULATION']['grid_type']
         self.max_time = float(config['SIMULATION']['max_time'])
+
+
         if 'BLOCK' in config.keys():
             self.block_origin = list2vec(config['BLOCK']['position'])
             self.block_length = float(config['BLOCK']['length'])
@@ -73,7 +76,8 @@ class SnowConfig:
             self.boundary_length = float(config['BOUNDARY']['length'])
             self.boundary_width = float(config['BOUNDARY']['width'])
             self.boundary_height = float(config['BOUNDARY']['height'])
-            self.num_boundary_particles = int((self.boundary_length / self.boundary_particle_radius) * (self.boundary_width / self.boundary_particle_radius) * (self.boundary_height / self.boundary_particle_radius))
+            self.boundary_particle_spacing = float(config['BOUNDARY']['spacing'])
+            self.num_boundary_particles = int((self.boundary_length / self.boundary_particle_spacing) * (self.boundary_width / self.boundary_particle_spacing) * (self.boundary_height / self.boundary_particle_spacing))
 
         if 'BOUNDARY_OBJECTS' in config.keys():
             s = config['BOUNDARY_OBJECTS']['paths']

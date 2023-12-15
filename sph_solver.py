@@ -172,6 +172,7 @@ class SnowSolver:
         p_0 = self.ps.init_density
         k = numerator / denom
         self.ps.lambda_t_i[i] = k * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
+        self.ps.lambda_t_i[i] = 100000
 
         if self.ps.lambda_t_i[i] < self.numerical_eps: print(f"lambda t_i is 0 at {i} because of {self.ps.rest_density[i]}, {k}")
 
@@ -190,18 +191,19 @@ class SnowSolver:
         # first the density is computed, then
         # the rest density is derived        
         detF = ti.abs(ti.Matrix.determinant(self.ps.deformation_gradient[i]))
-        density_i = 0.0
-        self.ps.for_all_neighbors(i, self.calc_density, density_i)
+        density_by_fluid = 0.0
+        self.ps.for_all_neighbors(i, self.calc_density, density_by_fluid)
 
-        # Eq 21 from the paper, we use only the fluid particles to compute rest denstiy
-        # if density_i > self.numerical_eps:
-        self.ps.density[i] = density_i
-        self.ps.rest_density[i] = self.ps.density[i] * detF
+        density_by_boundary = 0.0
+        self.ps.for_all_b_neighbors(i, self.calc_density_b, density_by_boundary)
 
-        self.ps.for_all_b_neighbors(i, self.calc_density_b, density_i)
+        # self.ps.rest_density[i] = density_by_fluid * detF
+        # self.ps.density[i] = density_by_boundary + density_by_fluid
+        # 
 
-        # if density_i > self.numerical_eps:
-        self.ps.density[i] = density_i
+        self.ps.rest_density[i] = self.ps.init_density
+        self.ps.density[i] =  density_by_boundary + self.ps.rest_density[i] / detF
+
 
         if self.ps.density[i] < self.numerical_eps or self.ps.rest_density[i] < self.numerical_eps : print(f"Density for {i} is {self.ps.density[i]}, rest density {self.ps.rest_density[i]}")
 
