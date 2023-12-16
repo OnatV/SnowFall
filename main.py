@@ -28,7 +28,8 @@ if __name__ =='__main__':
     sim_time = 0.0
     last_log_time = 0.0
     
-    logger = Logger(ps, cfg, args.replay)
+    if cfg.logging:
+        logger = Logger(ps, cfg, args.replay)
     if not args.replay:
         print("Creating a new simulation!")
         while ps.window.running and sim_time < cfg.max_time:
@@ -39,9 +40,11 @@ if __name__ =='__main__':
                 # print("Time:", sim_time)
                 snow_solver.step(cfg.deltaTime, sim_time)
                 # sim_is_running = False # press space for one step at a time
-                if sim_time - last_log_time > logger.log_time_step or sim_time == 0.0:
-                    logger.log_step(sim_time)
-                    last_log_time = sim_time
+
+                if cfg.logging:
+                    if sim_time - last_log_time > logger.log_time_step or sim_time == 0.0:
+                        logger.log_step(sim_time)
+                        last_log_time = sim_time
                 sim_time += cfg.deltaTime            
             ps.visualize()
     else:
