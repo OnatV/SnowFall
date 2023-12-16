@@ -11,7 +11,7 @@ vec3 = ti.types.vector(3, float)
 class ParticleSystem:
     def __init__(self, config: SnowConfig, GGUI = True):
         self.cfg = config
-        self.grid_type = "fluid"
+        self.grid_type = self.cfg.grid_type
         self.domain_start = np.array([0.0, 0.0, 0.0])
         self.domain_size = self.cfg.domain_size
         self.num_particles = self.cfg.num_particles

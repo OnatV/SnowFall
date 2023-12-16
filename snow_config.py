@@ -53,6 +53,7 @@ class SnowConfig:
         # # values from paper
         self.initialize_type = config['SIMULATION']['initialize_type']
         self.max_time = float(config['SIMULATION']['max_time'])
+        self.grid_type = config['SIMULATION']['grid_type']
         if 'BLOCK' in config.keys():
             self.block_origin = list2vec(config['BLOCK']['position'])
             self.block_length = float(config['BLOCK']['length'])
