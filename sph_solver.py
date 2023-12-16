@@ -192,7 +192,7 @@ class SnowSolver:
         self.ps.for_all_b_neighbors(i, self.calc_density_b, density_by_boundary)
 
         
-        # self.ps.rest_density[i] = density_by_fluid * detF
+        # self.ps.rest_density[i] = (density_by_fluid) * detF
         # self.ps.density[i] = density_by_boundary + density_by_fluid
         
         self.ps.rest_density[i] = self.ps.init_density
