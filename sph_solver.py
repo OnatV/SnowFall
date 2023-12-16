@@ -556,7 +556,7 @@ class SnowSolver:
             # these functions should update the acceleration field of the particles
             self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-3
             self.compute_external_forces(deltaTime) # Step 4
-            self.compute_friction_forces(deltaTime) # Step 5
+            # self.compute_friction_forces(deltaTime) # Step 5
             # print("before solve a")
             self.solve_a_lambda(deltaTime) # Step 6
             # self.solve_a_G(deltaTime)             #Step 7 

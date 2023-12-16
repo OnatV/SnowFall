@@ -124,6 +124,7 @@ class ParticleSystem:
         total_num_b_particles = self.num_b_particles
         for path, scale, pos in zip(self.object_paths, self.object_scales, self.object_pos):
             print("loading boundary object from", path)
+            if not path.endswith(".npy"): continue
             with open(path, "rb") as rf:
                 particle_pos = np.load(rf)
                 particle_pos *= scale
