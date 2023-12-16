@@ -25,6 +25,7 @@ class ParticleSystem:
         self.temperature = -10.0 # degrees Celsuis
         self.m_k = np.pi * float(4/3) * self.particle_radius ** self.dim * self.init_density # particle mass
         self.particle_spacing = self.cfg.particle_spacing
+        self.boundary_particle_spacing = self.cfg.boundary_particle_spacing
         # self.m_k = 0.008
         self.smoothing_radius = self.cfg.smoothing_radius_ratio * self.particle_radius
         # self.boundary_smoothing_radius = self.boundary_particle_radius * 4.0
@@ -190,15 +191,15 @@ class ParticleSystem:
         print("Boundary Block length", len_x)
         # block_position = origin
         # positions = ti.Vector.field(3, dtype=float, shape=int(len_x / self.particle_radius) * int(len_z / self.particle_radius) * int(len_y / self.particle_radius))
-        print((int(len_x / self.boundary_particle_radius)), int(len_y / self.boundary_particle_radius), int(len_z / self.boundary_particle_radius))
+        print((int(len_x / self.boundary_particle_spacing)), int(len_y / self.boundary_particle_spacing), int(len_z / self.boundary_particle_spacing))
 
-        for i in range(int(len_x / self.boundary_particle_radius)):
-            for j in range(int(len_z / self.boundary_particle_radius)):
-                for k in range(int(len_y / self.boundary_particle_radius)):
-                    x = i * (self.boundary_particle_radius) + origin[0]
-                    y = j * (self.boundary_particle_radius) + origin[2]
-                    z = k * (self.boundary_particle_radius) + origin[1]
-                    self.boundary_particles[int(k * (len_x / self.boundary_particle_radius) * (len_z / self.boundary_particle_radius) + j * (len_x / self.boundary_particle_radius) + i)] = ti.Vector([x, z, y])
+        for i in range(int(len_x / self.boundary_particle_spacing)):
+            for j in range(int(len_z / self.boundary_particle_spacing)):
+                for k in range(int(len_y / self.boundary_particle_spacing)):
+                    x = i * (self.boundary_particle_spacing) + origin[0]
+                    y = j * (self.boundary_particle_spacing) + origin[2]
+                    z = k * (self.boundary_particle_spacing) + origin[1]
+                    self.boundary_particles[int(k * (len_x / self.boundary_particle_spacing) * (len_z / self.boundary_particle_spacing) + j * (len_x / self.boundary_particle_spacing) + i)] = ti.Vector([x, z, y])
 
 
     @ti.kernel

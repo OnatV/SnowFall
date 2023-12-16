@@ -74,7 +74,8 @@ class SnowConfig:
             self.boundary_length = float(config['BOUNDARY']['length'])
             self.boundary_width = float(config['BOUNDARY']['width'])
             self.boundary_height = float(config['BOUNDARY']['height'])
-            self.num_boundary_particles = int((self.boundary_length / self.boundary_particle_radius) * (self.boundary_width / self.boundary_particle_radius) * (self.boundary_height / self.boundary_particle_radius))
+            self.boundary_particle_spacing = float(config['BOUNDARY']['spacing'])
+            self.num_boundary_particles = int((self.boundary_length / self.boundary_particle_spacing) * (self.boundary_width / self.boundary_particle_spacing) * (self.boundary_height / self.boundary_particle_spacing))
 
         if 'BOUNDARY_OBJECTS' in config.keys():
             s = config['BOUNDARY_OBJECTS']['paths']
