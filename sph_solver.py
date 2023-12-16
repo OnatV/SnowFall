@@ -170,7 +170,7 @@ class SnowSolver:
         p0_t = self.ps.rest_density[i]
         p_0 = self.ps.init_density
         k = numerator / denom
-        self.ps.lambda_t_i[i] = k * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
+        # self.ps.lambda_t_i[i] = k * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
         self.ps.lambda_t_i[i] = 100000
         self.ps.G_t_i[i] = (young_mod * nu) / (2 * (1 + nu)) * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
         # if (i[0] == 0):
@@ -198,7 +198,7 @@ class SnowSolver:
         self.ps.rest_density[i] = self.ps.init_density
         self.ps.density[i] =  density_by_boundary + self.ps.rest_density[i] / detF
         # Eq 21 from the paper, we use only the fluid particles to compute rest denstiy
-        # self.ps.density[i] = density_i
+
 
 
         # if i[0] == 0:
