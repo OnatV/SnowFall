@@ -423,19 +423,36 @@ class SnowSolver:
                 Steps:
                     Step 2 : self.compute_rest_density(i)
                     Step 3 : self.compute_correction_matrix(i)
-                    Step 4 : self.compute_accel_ext(i)
-                    Step 5 : self.compute_accel_friction(i)
         '''
         rest_density_sum = 0.0
         for i in ti.grouped(self.ps.position):
             self.compute_rest_density(i) #Step 2
             self.compute_lame_parameters(i)  #Section 3.3.2
             self.compute_correction_matrix(i) #Step 3
-            self.compute_accel_ext(i) #Step 4
-            # self.compute_accel_friction(i, deltaTime) #Step 5
             rest_density_sum += self.ps.rest_density[i]
         self.ps.avg_rest_density[0] = rest_density_sum / self.ps.num_particles
 
+    @ti.kernel
+    def compute_external_forces(self, deltaTime:float ):
+        '''
+            Computes for loop 1 in Algorithm 1 in the paper.
+            Includes adhesion, gravity and wind accelerations.
+                Steps:
+                    Step 4 : self.compute_accel_ext(i)
+
+        '''
+        for i in ti.grouped(self.ps.position):
+            self.compute_accel_ext(i) #Step 4
+
+    @ti.kernel
+    def compute_friction_forces(self, deltaTime:float ):
+        '''
+            Computes for loop 1 in Algorithm 1 in the paper.
+                Steps:
+                    Step 5 : self.compute_accel_friction(i)
+        '''
+        for i in ti.grouped(self.ps.position):
+            self.compute_accel_friction(i, deltaTime) #Step 5
 
     @ti.kernel
     def integrate_deformation_gradient(self, deltaTime:float):
@@ -530,7 +547,9 @@ class SnowSolver:
         # self.ps.gravity = set to zero
         if ti.static(self.snow_implemented):
             # these functions should update the acceleration field of the particles
-            self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-5
+            self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-3
+            self.compute_external_forces(deltaTime) # Step 4
+            self.compute_friction_forces(deltaTime) # Step 5
             # print("before solve a")
             self.solve_a_lambda(deltaTime) # Step 6
             # self.solve_a_G(deltaTime)             #Step 7 

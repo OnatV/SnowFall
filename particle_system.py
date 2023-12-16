@@ -186,8 +186,7 @@ class ParticleSystem:
         # block_position = origin
         # positions = ti.Vector.field(3, dtype=float, shape=int(len_x / self.particle_radius) * int(len_z / self.particle_radius) * int(len_y / self.particle_radius))
         print((int(len_x / self.boundary_particle_radius)), int(len_y / self.boundary_particle_radius), int(len_z / self.boundary_particle_radius))
-        for i in range(self.num_particles):
-            self.boundary_particles[i] = ti.Vector([0.0, 0.0, 0.0])
+
         for i in range(int(len_x / self.boundary_particle_radius)):
             for j in range(int(len_z / self.boundary_particle_radius)):
                 for k in range(int(len_y / self.boundary_particle_radius)):
