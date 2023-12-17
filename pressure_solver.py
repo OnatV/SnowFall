@@ -33,10 +33,15 @@ class PressureSolver:
         # now compute Ap
         A_p = -self.ps.rest_density[i] / ti.math.max(self.ps.lambda_t_i[i], self.numerical_eps) * self.ps.pressure[i] + deltaTime2 * self.ps.pressure_laplacian[i]
         aii = self.ps.jacobian_diagonal[i]
+        diagonal_sign= 2 * (aii > 0) - 1
         residuum = self.ps.rest_density[i] - self.ps.p_star[i] - A_p
-        pi = (0.5 / (ti.math.sign(aii) * ti.math.max(ti.abs(aii), self.numerical_eps))) * residuum
+        pi = (0.5 / ti.math.max(ti.abs(aii), self.numerical_eps)) * residuum
+        pi *= diagonal_sign
         self.ps.pressure[i] += pi[0]
         # density_error -= residuum
+        if ti.math.isnan(pi[0]):
+            print(f"GOT NAN Pressure {i}: aii {aii}, residuum {residuum}, pi {pi}, pressure {self.ps.pressure[i]}")
+            print(f"GOT NAN residuum: {residuum}, A_p: {A_p}, p_star: {self.ps.p_star[i]}, rest_density: {self.ps.rest_density[i]}")
         density_error += ti.abs(pi)
 
     @ti.func
@@ -66,7 +71,8 @@ class PressureSolver:
         sum_of_b = ti.Vector([0.0, 0.0, 0.0])
         self.ps.for_all_b_neighbors(i, self.helper_Vb, sum_of_b)
         self.ps.pressure_gradient[i] = sum_of_pressures + self.ps.rest_density[i] * self.ps.pressure[i] * sum_of_b
-
+        if i[0] == 0:
+            print(f"Pressure Gradient {i}: fluid pressures {sum_of_pressures}, boundary volume {sum_of_b}, pressure {self.ps.pressure[i]}")
 
     @ti.func
     def helper_sum_of_pressure(self, i, j, sum:ti.template()):
@@ -113,11 +119,16 @@ class PressureSolver:
             self.ps.jacobian_diagonal[i] = 0
             self.ps.velocity_star[i] = self.ps.velocity[i] + deltaTime * self.ps.acceleration[i] ##Replace LATER@@ Acceleration includes aother and a friction
 
+            if ti.math.isnan(self.ps.velocity_star[i]).any():
+                print(f"GOT NAN velocity_star {i}: velocity {self.ps.velocity[i]}, acceleration {self.ps.acceleration[i]}")
+
         for i in ti.grouped(self.ps.position):
             velocity_div = 0.0
             self.ps.for_all_neighbors(i, self.vel_div, velocity_div)
             self.ps.for_all_b_neighbors(i, self.vel_div_b, velocity_div)
             self.ps.p_star[i] = self.ps.density[i] - deltaTime * self.ps.density[i] * velocity_div
+            if ti.math.isnan(self.ps.p_star[i]):
+                print(f"GOT NAN p_star {i}: density {self.ps.density[i]}, velocity_div {velocity_div}")
             self.compute_jacobian_diagonal_entry(i, deltaTime)
 
     def implicit_pressure_solve(self, deltaTime:float) -> bool:
@@ -147,7 +158,7 @@ class PressureSolver:
                 if current_deviation < (prev_deviation) * 0.001 :
                     is_solved = True
                     print(f"Took {it} iterations to solve lambda, avg_density_error: {avg_density_error}, prev_avg_density_error: {prev_avg_density_error}, prev_deviation: {prev_deviation}")
-                    print("avg_errors", avg_errors)
+                    # print("avg_errors", avg_errors)
                 else:
                     is_solved = False
                                         
@@ -179,7 +190,7 @@ class PressureSolver:
 
     @ti.func
     def get_volume(self, i):
-        return (self.ps.m_k / ti.math.max(self.ps.rest_density[i], self.numerical_eps ) )
+        return (self.ps.m_k / ti.math.max(self.ps.init_density, self.numerical_eps ) )
     
     def solve(self, deltaTime):
         self.implicit_solver_prepare(deltaTime)

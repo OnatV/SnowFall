@@ -30,6 +30,9 @@ class AdhesionModel:
         # print("x_ib range:", x_ib)
         # exit()
         coeff = self.beta * Psi_b * adhesion_spline(x_ib.norm(), h)
+        if ti.math.isnan(coeff):
+            print(f"GOT NAN coeff: {coeff}, rest density: {rest_density}, boundry volume: {V_b}, adhesion_spline: {adhesion_spline(x_ib.norm(), h)}, x_ib: {x_ib}")
+
         res -= coeff * x_ib.normalized()
 
     @ti.func
@@ -38,6 +41,8 @@ class AdhesionModel:
         self.ps.for_all_b_neighbors(i_idx, self.compute_adh_i_b, res)
         if i_idx[0] == 0:
             print("adhesion force:" , res)   
+        if ti.math.isnan(res[0]):
+            print(f"GOT NAN adhesion force: {res}")
         self.ps.acceleration[i_idx] += res
 
         

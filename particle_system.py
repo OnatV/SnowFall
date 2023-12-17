@@ -23,18 +23,17 @@ class ParticleSystem:
         self.init_density = self.cfg.init_density
         self.gravity = ti.Vector(self.cfg.gravity)
         self.temperature = -10.0 # degrees Celsuis
-        self.m_k = np.pi * float(4/3) * self.particle_radius ** self.dim * self.init_density # particle mass
+        self.m_k = np.pi * float(4/3) * (self.particle_radius ** self.dim) * self.init_density # particle mass
         self.particle_spacing = self.cfg.particle_spacing
         self.boundary_particle_spacing = self.cfg.boundary_particle_spacing
         # self.m_k = 0.008
-        self.smoothing_radius = self.cfg.smoothing_radius_ratio * self.particle_radius
-        # self.boundary_smoothing_radius = self.boundary_particle_radius * 4.0
+        self.smoothing_radius = self.cfg.smoothing_radius_ratio * self.particle_spacing
+
         self.wind_direction = ti.Vector(self.cfg.wind_direction)
         self.enable_wind = False
         self.initialize_type = self.cfg.initialize_type
         self.grid_spacing = self.smoothing_radius * 2
-        # self.grid_size= self.cfg.grid_size
-        # self.num_grid_cells = int(self.cfg.grid_size ** 3)
+
         self.max_particles_per_cell = self.cfg.grid_max_particles_per_cell
 
         self.friction_coef = self.cfg.friction
@@ -213,11 +212,27 @@ class ParticleSystem:
             self.position[i] = ti.Vector([x, y, z])
 
     # simple helper to initialize deformation gradient as the identity
+
+    def physics_initialize(self):
+        self.gradient_initialize()
+        self.velocity_initialize()
+        self.acceleration_initialize()
+
     @ti.kernel
     def gradient_initialize(self):
-        # mat = ti.Matrix(m=3, n=3, dtype=float)
         for i in range(self.num_particles):
             self.deformation_gradient[i] = ti.Matrix.identity(float, 3)
+
+    @ti.kernel
+    def velocity_initialize(self):
+        for i in range(self.num_particles):
+            self.velocity[i] = ti.Vector([0.0, 0.0, 0.0])
+            
+    @ti.kernel
+    def acceleration_initialize(self):
+        for i in range(self.num_particles):
+            self.acceleration[i] = ti.Vector([0.0, 0.0, 0.0])
+
 
     @ti.kernel
     def boundary_initialize(self):
@@ -263,7 +278,7 @@ class ParticleSystem:
         self.initialize_boundary_particle_block(self.cfg.boundary_length, self.cfg.boundary_height, self.cfg.boundary_width, boundary_origin)
         self.b_grid.update_grid(self.boundary_particles)
         self.boundary_velocity_initialize()
-        self.gradient_initialize()
+        self.physics_initialize()
         print("Intialized!")
 
     @ti.kernel
