@@ -194,7 +194,7 @@ class ParticleSystem:
                         x = i * (particle_spacing) + origin[0]
                         y = j * (particle_spacing) + origin[2]
                         z = k * (particle_spacing) + origin[1]
-                        posiitons[int(k * (len_x / particle_spacing) * (len_z / particle_spacing) + j * (len_x / particle_spacing) + i)] = ti.Vector([x, z, y])
+                        posiitons[cnt] = ti.Vector([x, z, y])
                         cnt += 1
 
         _fill(self.position, len_x, len_y, len_z, self.particle_spacing, self.num_particles, origin)
@@ -211,7 +211,7 @@ class ParticleSystem:
                     x = i * (self.boundary_particle_spacing) + origin[0]
                     y = j * (self.boundary_particle_spacing) + origin[2]
                     z = k * (self.boundary_particle_spacing) + origin[1]
-                    self.boundary_particles[int(k * (len_x / self.boundary_particle_spacing) * (len_z / self.boundary_particle_spacing) + j * (len_x / self.boundary_particle_spacing) + i)] = ti.Vector([x, z, y])
+                    self.boundary_particles[int(k * int(len_x / self.boundary_particle_spacing) * int(len_z / self.boundary_particle_spacing) + j * int(len_x / self.boundary_particle_spacing) + i)] = ti.Vector([x, z, y])
 
 
     @ti.kernel

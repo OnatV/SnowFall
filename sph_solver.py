@@ -242,7 +242,7 @@ class SnowSolver:
     def compute_a_lambda(self, success : ti.template()):
         for i in ti.grouped(self.ps.position):
             a_lambda = ti.Vector([0.0, 0.0, 0.0])
-            if not success:
+            if (not success) or (self.ps.density[i] < self.numerical_eps):
                 a_lambda = ti.Vector([0.0, 0.0, 0.0])
             else:                
                 a_lambda = -1.0 / self.ps.density[i] * self.ps.pressure_gradient[i]
