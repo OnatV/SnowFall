@@ -13,14 +13,24 @@ class ElasticSolver:
         self.ps = ps
         self.velocity_pred = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
         self.basis_vec = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
+       
         self.basis_grad = ti.Matrix.field(m=self.ps.dim, n=self.ps.dim, dtype=float, shape=self.ps.num_particles)
         self.velocity_pred_grad = ti.Matrix.field(m=self.ps.dim, n=self.ps.dim, dtype=float, shape=self.ps.num_particles)
         # self.F_E_pred = ti.Matrix.field(m=self.ps.dim, n=self.ps.dim, dtype=float, shape=self.ps.num_particles)
+        self.rhs_prev = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
         self.rhs = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
         self.lhs = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
         self.stress_tensor_pred = ti.Matrix.field(m=self.ps.dim, n=self.ps.dim, dtype=float, shape=self.ps.num_particles)
         self.basis_stress_tensor = ti.Matrix.field(m=self.ps.dim, n=self.ps.dim, dtype=float, shape=self.ps.num_particles)
+
+        self.a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
         self.deltaTime = 0.1
+
+    @ti.kernel
+    def init_basis_vec_prev(self):
+        for i in ti.grouped(self.ps.position):
+            self.rhs_prev[i] = ti.Vector.zero(float, self.ps.dim)
+
 
     @ti.func
     def get_volume(self, i):
@@ -111,7 +121,8 @@ class ElasticSolver:
     def compute_stress_pred_div_fluid_helper(self, i, j, sum: ti.template()):
         x_ij = self.ps.position[i] - self.ps.position[j]
         L_i = self.ps.correction_matrix[i]
-        sum += self.stress_tensor_pred[j] @ (-self.get_volume(j) * cubic_kernel_derivative_corrected(-x_ij, self.ps.smoothing_radius, L_i)) + \
+        L_j = self.ps.correction_matrix[j]
+        sum += self.stress_tensor_pred[j] @ (-self.get_volume(j) * cubic_kernel_derivative_corrected(-x_ij, self.ps.smoothing_radius, L_j)) + \
             self.stress_tensor_pred[i] @ (self.get_volume(j) * cubic_kernel_derivative_corrected(x_ij, self.ps.smoothing_radius, L_i))
 
     @ti.func
@@ -128,7 +139,8 @@ class ElasticSolver:
         for i in ti.grouped(self.ps.position):
             self.compute_stress_tensor_pred(i)            
             self.rhs[i] = (1.0 / self.ps.density[i]) * self.compute_stress_pred_div(i)
-            # print(self.rhs[i])
+            if ti.math.isnan(self.rhs[i]).any():
+                print(f"GOT {self.rhs[i]} rhs for {i}: density {self.ps.density[i]}, stress_tensor_pred {self.stress_tensor_pred[i]}")
 
     # ----------------------------------------- LHS -----------------------------------------#
     # this func is a copy+paste of above velocity gradient discretization
@@ -175,8 +187,8 @@ class ElasticSolver:
     def compute_basis_stress_tensor(self, i):
         prod = self.basis_grad[i] @ self.ps.deformation_gradient[i]
         strain = (prod + prod.transpose())
-        # if ti.math.isnan(strain).any():
-        #     print(f"GOT {strain} strain for {i}:basis grad {self.basis_grad[i]}, deformation grad {self.ps.deformation_gradient[i]}")
+        if ti.math.isnan(strain).any():
+            print(f"GOT {strain} strain for {i}:basis grad {self.basis_grad[i]}, deformation grad {self.ps.deformation_gradient[i]}")
         self.basis_stress_tensor[i] = self.ps.G_t_i[i] * (strain)
 
 
@@ -185,7 +197,7 @@ class ElasticSolver:
         stress_tensor_b_i = self.basis_stress_tensor[i].trace() * ti.Matrix.identity(float, 3) / 3
         sum_fluid = ti.Matrix.zero(float, 3)
         self.ps.for_all_neighbors(i, self.compute_basis_stress_div_fluid_helper, sum_fluid)
-        # sum_b = ti.Matrix.zero(float, 3)
+
         sum_b = ti.Matrix.zero(float, 3)
         self.ps.for_all_b_neighbors(i, self.compute_basis_stress_div_b_helper, sum_b)
         return sum_fluid + stress_tensor_b_i @ sum_b
@@ -195,7 +207,8 @@ class ElasticSolver:
     def compute_basis_stress_div_fluid_helper(self, i, j, sum: ti.template()):
         x_ij = self.ps.position[i] - self.ps.position[j]
         L_i = self.ps.correction_matrix[i]
-        sum += self.basis_stress_tensor[j] @ (-self.get_volume(j) * cubic_kernel_derivative_corrected(-x_ij, self.ps.smoothing_radius, L_i)) + \
+        L_j = self.ps.correction_matrix[j]
+        sum += self.basis_stress_tensor[j] @ (-self.get_volume(j) * cubic_kernel_derivative_corrected(-x_ij, self.ps.smoothing_radius, L_j)) + \
             self.basis_stress_tensor[i] @ (self.get_volume(j) * cubic_kernel_derivative_corrected(x_ij, self.ps.smoothing_radius, L_i))
 
     @ti.func
@@ -208,28 +221,69 @@ class ElasticSolver:
     def compute_lhs(self):
         for i in ti.grouped(self.ps.position):
             self.basis_grad[i] = self.compute_basis_gradient(i)
+            if ti.math.isnan(self.basis_grad[i]).any():
+                print(f"GOT {self.basis_grad[i]} basis grad for {i}")
         for i in ti.grouped(self.ps.position):
             self.compute_basis_stress_tensor(i)
             stress_div = self.compute_basis_stress_div(i)
             self.lhs[i] = self.basis_vec[i] - (self.deltaTime / self.ps.density[i]) * stress_div
-            # if ti.math.isnan(self.lhs[i]).any():
-            #     print(f"GOT {self.lhs[i]} lhs for {i}:basis_vec {self.basis_vec[i]}, stress_div {stress_div}")
+            if ti.math.isnan(self.lhs[i]).any():
+                print(f"GOT {self.lhs[i]} lhs for {i}:basis_vec {self.basis_vec[i]}, stress_div {stress_div}")
     
+@ti.data_oriented
+class MyLinearOperator(LinearOperator):
+    def __init__(self, es:ElasticSolver):
+        super().__init__(shape=(es.ps.num_particles, es.ps.num_particles), dtype=float)
+        self.es = es
+
+    @ti.kernel
+    def _matvec(self, x:ti.template(), Ax:ti.template()):
+
+        for i in ti.grouped(self.es.ps.position):
+            self.es.basis_grad[i] = self.es.compute_basis_gradient(i)
+            if ti.math.isnan(self.es.basis_grad[i]).any():
+                print(f"GOT {self.es.basis_grad[i]} basis grad for {i}")
+        for i in ti.grouped(self.es.ps.position):
+            self.es.compute_basis_stress_tensor(i)
+            stress_div = self.es.compute_basis_stress_div(i)
+            self.es.lhs[i] = self.es.basis_vec[i] - (self.es.deltaTime / self.es.ps.density[i]) * stress_div
+            if ti.math.isnan(self.es.lhs[i]).any():
+                print(f"GOT {self.es.lhs[i]} lhs for {i}:basis_vec {self.es.basis_vec[i]}, stress_div {stress_div}")
+
+        x = self.es.a_G_ti
+
 # this is the linear operator that scipy will use to solve the Bi-CGSTAB
 # this function will need to set the basis vector
 # input v is (3 * N, 1), we need to set it to N by 3 (reshape) 
 # and then populate self.basis vector with that information
-def linop(v, es):
+def linop_numpy(v, es : ElasticSolver):
     es.basis_vec.from_numpy(v.reshape([es.ps.num_particles, 3]).astype(np.float32))
     es.compute_lhs()
     return es.lhs.to_numpy().reshape([3 * es.ps.num_particles,])
 
-def solve(es: ElasticSolver, dt:float):
+def solve_numpy(es: ElasticSolver, dt:float):
     es.deltaTime = dt
     es.compute_rhs()
     b = es.rhs.to_numpy().reshape([3 * es.ps.num_particles,])
-    A = LinearOperator(shape=(3 * es.ps.num_particles, 3 * es.ps.num_particles), matvec=lambda x: linop(x, es))
-    return bicgstab(A=A, b=b, maxiter=250, tol=1e-4)
+    x0 = es.a_G_ti.to_numpy().reshape([3 * es.ps.num_particles,])
+    A = LinearOperator(shape=(3 * es.ps.num_particles, 3 * es.ps.num_particles), matvec=lambda x: linop_numpy(x, es))
     
+    a_G, exit_code =  bicgstab(A=A, b=b, x0 = x0, maxiter=5000, tol=1e-6)
+    if exit_code >= 0:
+        a_G = a_G.reshape([es.ps.num_particles, 3])
+        es.a_G_ti.from_numpy(a_G.astype(np.float32))
+    else:
+        print("BiCGSTAB failed:", exit_code)
+
+    return exit_code
+    
+def solve_taichi(es:ElasticSolver, dt:float):
+    es.deltaTime = dt
+    A = MyLinearOperator(es)
+    b = es.rhs
+    res = ti.linalg.MatrixFreeBICGSTAB(A, b, es.a_G_ti, tol=1e-06, maxiter=5000, quiet=True)
+    print(f"new solver:", res)
+
+
 
     

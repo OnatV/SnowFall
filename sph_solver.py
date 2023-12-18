@@ -7,7 +7,7 @@ from particle_system import ParticleSystem
 from pressure_solver import PressureSolver
 from adhesion_model import AdhesionModel
 from snow_config import SnowConfig
-from elastic_solver import ElasticSolver, solve as solve_elastic
+from elastic_solver import ElasticSolver, solve_numpy as solve_elastic
 from kernels import cubic_kernel, cubic_kernel_derivative
 
 @ti.func
@@ -116,8 +116,8 @@ class SnowSolver:
 
     @ti.kernel
     def compute_boundary_volumes(self):
+
         correction = 0.8
-        # correction = 1.0
         for i in range(self.ps.num_b_particles):
             kernel_sum = 0.0
             for j in range(self.ps.num_b_particles):
@@ -126,6 +126,7 @@ class SnowSolver:
                 kernel_sum += cubic_kernel((self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm(), self.ps.smoothing_radius)
 
             self.ps.boundary_particles_volume[i] =  correction * (1.0 / kernel_sum)
+
             
 
     @ti.kernel
@@ -290,14 +291,12 @@ class SnowSolver:
     def solve_a_G(self, deltaTime):
         
         if self.enable_elastic_solver:
-            a_G, exit_code = solve_elastic(self.elastic_solver, deltaTime)
+            exit_code = solve_elastic(self.elastic_solver, deltaTime)
             if exit_code >= 0:
-                a_G = a_G.reshape([self.ps.num_particles, 3])
-                a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
-                a_G_ti.from_numpy(a_G.astype(np.float32))
-                self._accumulate_a_G(a_G_ti)
+                self._accumulate_a_G(self.elastic_solver.a_G_ti)
             else:
-                print("BiCGSTAB failed:", exit_code)
+                print("Elastic solver failed to converge")
+
 
     @ti.func
     def aux_correction_matrix(self, i_idx, j_idx, res:ti.template()):
@@ -603,11 +602,11 @@ class SnowSolver:
             self.compute_lambda(deltaTime) # Step 1, includes Steps 2-3
             self.compute_kernel_correction_matrix(deltaTime) # Step 1, includes Steps 2-3
             self.compute_external_forces(deltaTime) # Step 4
-            self.compute_friction_forces(deltaTime) # Step 5
 
             # print("before solve a")
             self.solve_a_lambda(deltaTime) # Step 6
             self.solve_a_G(deltaTime)             #Step 7 
+            self.compute_friction_forces(deltaTime) # Step 5
             self.integrate_velocity(deltaTime) # Step 8-9
             self.integrate_deformation_gradient(deltaTime) #Step 10-11
 
