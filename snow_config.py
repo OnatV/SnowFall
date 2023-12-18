@@ -43,12 +43,15 @@ class SnowConfig:
         self.max_time = float(config['SIMULATION']['max_time'])
         self.grid_type = config['SIMULATION']['grid_type']
         if 'BLOCK' in config.keys():
+            self.block_max_num_particles = int(config['BLOCK']['max_num_particles'])
             self.block_origin = list2vec(config['BLOCK']['position'])
             self.block_length = float(config['BLOCK']['length'])
             self.block_width = float(config['BLOCK']['width'])
             self.block_height = float(config['BLOCK']['height'])
             self.particle_spacing = float(config['BLOCK']['spacing'])
             self.num_particles = int((self.block_length / self.particle_spacing) * (self.block_width / self.particle_spacing) * (self.block_height / self.particle_spacing))
+            if self.num_particles > self.block_max_num_particles:
+                self.num_particles = self.block_max_num_particles
             print("num particles", self.num_particles)
 
         if 'LOGGING' in config.keys(): # consider changing for upper/lowercase matches

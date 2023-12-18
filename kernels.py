@@ -39,6 +39,76 @@ def cubic_kernel_derivative(r, h) -> ti.Vector:
             d_w = l * (-f * f) * grad_q
     return d_w
 
+# ##CubicSpline from 
+# ##https://pysph.readthedocs.io/en/latest/_modules/pysph/base/kernels.html#CubicSpline
+# @ti.func
+# def cubic_kernel(r_norm, h)-> ti.f32:
+
+#     h1 = 1. / h
+#     q = r_norm * h1
+
+#     fac =  h1 * h1 * h1 / ti.math.pi
+
+#     tmp2 = 2. - q
+
+#     val = 0.0
+#     if (q > 2.0):
+#         val = 0.0
+#     elif (q > 1.0):
+#         val = 0.25 * tmp2 * tmp2 * tmp2
+#     else:
+#         val = 1 - 1.5 * q * q * (1 - 0.5 * q)
+
+#     return val * fac
+
+# ##CubicSpline from 
+# ##https://pysph.readthedocs.io/en/latest/_modules/pysph/base/kernels.html#CubicSpline
+# @ti.func
+# def cubic_kernel_derivative(r, h=1.0) -> ti.Vector:
+
+#     h1 = 1. / h
+#     r_norm = r.norm()
+#     # compute the gradient.
+#     tmp = 0.0
+#     if (r_norm > 1e-12):
+#         wdash = dwdq(r_norm, h)
+#         tmp = wdash * h1 / r_norm
+#     else:
+#         tmp = 0.0
+
+#     return r * tmp
+
+# ##CubicSpline from 
+# ##https://pysph.readthedocs.io/en/latest/_modules/pysph/base/kernels.html#CubicSpline
+# @ti.func
+# def dwdq(r_norm, h):
+#         """Gradient of a kernel is given by
+#         .. math::
+#             \nabla W = normalization  \frac{dW}{dq} \frac{dq}{dx}
+#             \nabla W = w_dash  \frac{dq}{dx}
+
+#         Here we get `w_dash` by using `dwdq` method
+#         """
+#         h1 = 1. / h
+#         q = r_norm * h1
+
+#         fac = h1 * h1 * h1 / ti.math.pi
+
+#         # compute sigma * dw_dq
+#         tmp2 = 2. - q
+#         val  = 0.0
+#         if (r_norm > 1e-12):
+#             if (q > 2.0):
+#                 val = 0.0
+#             elif (q > 1.0):
+#                 val = -0.75 * tmp2 * tmp2
+#             else:
+#                 val = -3.0 * q * (1 - 0.75 * q)
+#         else:
+#             val = 0.0
+
+#         return val * fac
+
 @ti.func    
 def cubic_kernel_derivative_corrected(r, h, L) -> ti.Vector:
     # use ps.smoothing_radius to calculate the derivative of kernel weight of particles

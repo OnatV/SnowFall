@@ -189,7 +189,7 @@ class SnowSolver:
         k = numerator / denom
         self.ps.lambda_t_i[i] = k * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
         # self.ps.lambda_t_i[i] = 38800 #E = 140kPa
-        self.ps.lambda_t_i[i] = 5500 #E = 20kPa
+        # self.ps.lambda_t_i[i] = 5500 #E = 20kPa
         self.ps.G_t_i[i] = (young_mod * nu) / (2 * (1 + nu)) * ti.exp(xi * (self.ps.rest_density[i] - p_0) / self.ps.rest_density[i])
         # if (i[0] == 0):
             # print("self.ps.lambda_t_i[i]", self.ps.lambda_t_i[i])
@@ -250,6 +250,8 @@ class SnowSolver:
             if ti.static(self.verbose_print):
                 if i[0] == 0:
                     print(f"Accel Lambda {i}: accel {a_lambda} pressure gradient {self.ps.pressure_gradient[i]}, density {self.ps.density[i]}" )
+            if ti.math.isnan(a_lambda).any():
+                print(f"GOT NAN a_lambda {a_lambda}, pressure gradient, {self.ps.pressure_gradient[i]}, density, {self.ps.density[i]}")
 
     
     @ti.func
@@ -282,6 +284,8 @@ class SnowSolver:
             if ti.static(self.verbose_print):
                 if i[0] == 0:
                     print(f"Accel G {i}: accel {a_G_ti[i]}")
+            if ti.math.isnan(a_G_ti[i]).any():
+                print(f"GOT NAN a_G {a_G_ti[i]}")
 
     def solve_a_G(self, deltaTime):
         

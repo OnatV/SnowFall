@@ -173,19 +173,32 @@ class ParticleSystem:
             if any_update:
                 self.b_grid.update_grid(self.boundary_particles)
 
-    @ti.kernel
     def initialize_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template()):
         # print("Block length", block_length)
         print((int(len_x / self.particle_spacing)), int(len_y / self.particle_spacing), int(len_z / self.particle_spacing))
-        for i in range(self.num_particles):
-            self.position[i] = ti.Vector([0.0, 0.0, 0.0])
-        for i in range(int((len_x / self.particle_spacing))):
-            for j in range(int((len_z / self.particle_spacing))):
-                for k in range(int((len_y / self.particle_spacing))):
-                    x = i * (self.particle_spacing) + origin[0]
-                    y = j * (self.particle_spacing) + origin[2]
-                    z = k * (self.particle_spacing) + origin[1]
-                    self.position[int(k * (len_x / self.particle_spacing) * (len_z / self.particle_spacing) + j * (len_x / self.particle_spacing) + i)] = ti.Vector([x, z, y])
+        requested_num_particles = int((len_x / self.particle_spacing) * (len_y / self.particle_spacing) * (len_z / self.particle_spacing))
+        print("requested num particles", requested_num_particles, "max num particles", self.cfg.block_max_num_particles)
+
+        @ti.kernel
+        def _fill(posiitons: ti.template(), len_x:float, len_y:float, len_z:float, particle_spacing: float, num_particles:ti.types.i64, origin:ti.template()):
+
+            for i in range(num_particles):
+                posiitons[i] = ti.Vector([0.0, 0.0, 0.0])
+
+            cnt = 0
+            for i in range(int((len_x / particle_spacing))):
+                for j in range(int((len_z / particle_spacing))):
+                    for k in range(int((len_y / particle_spacing))):
+                        if cnt > num_particles:
+                            continue
+                        x = i * (particle_spacing) + origin[0]
+                        y = j * (particle_spacing) + origin[2]
+                        z = k * (particle_spacing) + origin[1]
+                        posiitons[int(k * (len_x / particle_spacing) * (len_z / particle_spacing) + j * (len_x / particle_spacing) + i)] = ti.Vector([x, z, y])
+                        cnt += 1
+
+        _fill(self.position, len_x, len_y, len_z, self.particle_spacing, self.num_particles, origin)
+
     @ti.kernel
     def initialize_boundary_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template()):
         print("Boundary Block length", len_x)
