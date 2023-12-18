@@ -180,7 +180,8 @@ class FakeGrid:
         ###Iterate over all neighbours of grid cell i
 
         for j in ti.grouped(ti.ndrange( positions.shape[0] ) ):
-            if (positions[i] - positions[j[0]]).norm() <= h and (i[0] != j[0]):
+            # if (positions[i] - positions[j[0]]).norm() <= h and (i[0] != j[0]):
+            if (positions[i] - positions[j[0]]).norm() <= h:
                 func(i, j, ret)
     
     @ti.func
