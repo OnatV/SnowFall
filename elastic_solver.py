@@ -26,12 +26,6 @@ class ElasticSolver:
     def get_volume(self, i):
         return (self.ps.m_k / ti.math.max(self.ps.density[i], 1e-5 ) )
 
-    @ti.func
-    def clamp_deformation_gradients(self, matrix):
-        U, S, V = ti.svd(matrix)
-        S = ti.math.clamp(S, 1.0 - self.ps.theta_clamp_c, 1.0 + self.ps.theta_clamp_s)
-        return V @ S @ V.transpose() ## This supposedly removes the rotation part
-
     # ----------------------------------------- RHS -----------------------------------------#
 
     @ti.func
@@ -40,19 +34,33 @@ class ElasticSolver:
 
     @ti.func
     def compute_velocity_gradient(self,i):
+
+
+        ##Currently only computes the gradient using snow particles, ie no boundary Eq.17
         grad_v_i_s_prime = ti.Matrix.zero(dt=float, n=3, m=3)
         self.ps.for_all_neighbors(i, self.helper_compute_velocity_gradient_uncorrected, grad_v_i_s_prime)
+
         grad_v_i_b_prime = ti.Matrix.zero(dt=float, n=3, m=3)
         self.ps.for_all_b_neighbors(i, self.helper_compute_velocity_gradient_b_uncorrected, grad_v_i_b_prime)
+
         L_i = self.ps.correction_matrix[i]
-        if self.ps.is_pseudo_L_i[i]:
-            L_i = self.ps.pseudo_correction_matrix[i]
-        L_i = ti.Matrix.identity(float, 3)
-        grad_v_i_tilde = grad_v_i_s_prime @ L_i.transpose() + (grad_v_i_b_prime  @ L_i.transpose()).trace() * ti.Matrix.identity(float, 3) / 3        
+
+        ##In the Paragraph between Eq17 and Eq18
+        grad_v_i_tilde = grad_v_i_s_prime @ L_i.transpose() + (grad_v_i_b_prime  @ L_i.transpose()).trace() * ti.Matrix.identity(float, 3) / 3
+        
         V_i_prime = (grad_v_i_s_prime + grad_v_i_b_prime).trace() * ti.Matrix.identity(float, 3) / 3
         R_i_tilde = (grad_v_i_tilde - grad_v_i_tilde.transpose()) / 2 
         S_i_tilde = (grad_v_i_tilde + grad_v_i_tilde.transpose()) / 2 - grad_v_i_tilde.trace() * ti.Matrix.identity(float, 3) / 3
+        # if(i[0] == 0):
+        #     print("---Vi---", V_i_prime)
+
         return V_i_prime + R_i_tilde + S_i_tilde
+    
+    @ti.func
+    def clamp_deformation_gradients(self, matrix):
+        U, S, V = ti.svd(matrix)
+        S = ti.math.clamp(S, self.ps.theta_clamp_c, self.ps.theta_clamp_s)
+        return V @ S @ V.transpose() ## This supposedly removes the rotation part
 
     @ti.func
     def helper_compute_velocity_gradient_uncorrected(self, i_idx, j_idx, res:ti.template()):
@@ -83,7 +91,7 @@ class ElasticSolver:
     @ti.func 
     def compute_stress_tensor_pred(self, i):
         F_E_pred = self.ps.deformation_gradient[i] + self.deltaTime * self.velocity_pred_grad[i] @ self.ps.deformation_gradient[i]
-        # F_E_pred = self.clamp_deformation_gradients(F_E_pred)
+        F_E_pred = self.clamp_deformation_gradients(F_E_pred)
         strain = 0.5 * (F_E_pred + F_E_pred.transpose())
         self.stress_tensor_pred[i] = (2 * self.ps.G_t_i[i]) * (strain - ti.Matrix.identity(float, 3) )
 
@@ -173,7 +181,10 @@ class ElasticSolver:
     def compute_basis_stress_tensor(self, i):
         prod = self.basis_grad[i] @ self.ps.deformation_gradient[i]
         strain = (prod + prod.transpose())
+        if ti.math.isnan(strain).any():
+            print(f"GOT {strain} strain for {i}:prod {self.basis_grad[i]}, stress_div {self.ps.deformation_gradient[i]}")
         self.basis_stress_tensor[i] = self.ps.G_t_i[i] * (strain)
+
 
     @ti.func
     def compute_basis_stress_div(self, i):
@@ -209,7 +220,10 @@ class ElasticSolver:
             self.basis_grad[i] = self.compute_basis_gradient(i)
         for i in ti.grouped(self.ps.position):
             self.compute_basis_stress_tensor(i)
-            self.lhs[i] = self.basis_vec[i] - (self.deltaTime / self.ps.density[i]) * self.compute_basis_stress_div(i)
+            stress_div = self.compute_basis_stress_div(i)
+            self.lhs[i] = self.basis_vec[i] - (self.deltaTime / self.ps.density[i]) * stress_div
+            # if ti.math.isnan(self.lhs[i]).any():
+            #     print(f"GOT {self.lhs[i]} lhs for {i}:basis_vec {self.basis_vec[i]}, stress_div {stress_div}")
     
 # this is the linear operator that scipy will use to solve the Bi-CGSTAB
 # this function will need to set the basis vector
@@ -225,7 +239,7 @@ def solve(es: ElasticSolver, dt:float):
     es.compute_rhs()
     b = es.rhs.to_numpy().reshape([3 * es.ps.num_particles,])
     A = LinearOperator(shape=(3 * es.ps.num_particles, 3 * es.ps.num_particles), matvec=lambda x: linop(x, es))
-    return bicgstab(A=A, b=b, maxiter=100, tol=1e-3)
+    return bicgstab(A=A, b=b, maxiter=250, tol=1e-4)
     
 
     

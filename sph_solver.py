@@ -519,11 +519,7 @@ class SnowSolver:
         self.ps.for_all_b_neighbors(i, self.helper_compute_velocity_gradient_b_uncorrected, grad_v_i_b_prime)
 
         L_i = self.ps.correction_matrix[i]
-        L_i = ti.Matrix.identity(float, 3)
-        #if self.ps.is_pseudo_L_i[i]:
-        #    L_i = self.ps.pseudo_correction_matrix[i]
-        # if(i[0] == 0):
-        #     print("---LI---", L_i)
+
         ##In the Paragraph between Eq17 and Eq18
         grad_v_i_tilde = grad_v_i_s_prime @ L_i.transpose() + (grad_v_i_b_prime  @ L_i.transpose()).trace() * ti.Matrix.identity(float, 3) / 3
         
@@ -564,7 +560,7 @@ class SnowSolver:
     @ti.func
     def clamp_deformation_gradients(self, matrix):
         U, S, V = ti.svd(matrix)
-        S = ti.math.clamp(S, 1.0 - self.ps.theta_clamp_c, 1.0 + self.ps.theta_clamp_s)
+        S = ti.math.clamp(S, self.ps.theta_clamp_c, self.ps.theta_clamp_s)
         return V @ S @ V.transpose() ## This supposedly removes the rotation part
     
 
