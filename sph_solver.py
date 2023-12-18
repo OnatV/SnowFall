@@ -337,12 +337,14 @@ class SnowSolver:
         self.ps.for_all_b_neighbors(i, self.aux_correction_matrix_b, tmp_i)
 
         det = ti.Matrix.determinant(tmp_i)
-        if det != 0: 
+        if det > self.numerical_eps: 
             self.ps.correction_matrix[i] = tmp_i.inverse()
         else: # no inverse 
               # hence use the peudoinverse
-            pseudo = (tmp_i.transpose() * tmp_i).inverse()
-            self.ps.correction_matrix[i] = pseudo * tmp_i.transpose()
+            pseudo = (tmp_i.transpose() @ tmp_i)
+            if ti.Matrix.determinant(pseudo) < self.numerical_eps:
+                pseudo = pseudo + 0.002 * ti.Matrix.identity(float, 3)
+            self.ps.correction_matrix[i] = pseudo.inverse() * tmp_i.transpose()
             
 
     @ti.func

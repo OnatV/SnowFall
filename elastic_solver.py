@@ -51,8 +51,11 @@ class ElasticSolver:
         S_i_tilde = (grad_v_i_tilde + grad_v_i_tilde.transpose()) / 2 - grad_v_i_tilde.trace() * ti.Matrix.identity(float, 3) / 3
         # if(i[0] == 0):
         #     print("---Vi---", V_i_prime)
+        res = V_i_prime + R_i_tilde + S_i_tilde
 
-        return V_i_prime + R_i_tilde + S_i_tilde
+        if ti.math.isnan(res).any():
+                print(f"GOT {res} velocity_pred_grad for {i}:velocity_pred {self.velocity_pred[i]}, correction_matrix {L_i},fluid grad {grad_v_i_s_prime}, boundary grad {grad_v_i_b_prime}")
+        return res
     
     @ti.func
     def clamp_deformation_gradients(self, matrix):
