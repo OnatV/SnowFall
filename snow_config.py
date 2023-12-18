@@ -36,6 +36,7 @@ class SnowConfig:
         self.enable_friction = bool(config['SIMULATION']['enable_friction'].lower() == "true") 
         self.enable_elastic_solver = bool(config['SIMULATION']['enable_elastic_solver'].lower() == "true") 
         self.enable_compression_solver = bool(config['SIMULATION']['enable_compression_solver'].lower() == "true") 
+        self.verbose_print = bool(config['SIMULATION']['verbose_print'].lower() == "true")
 
         # # values from paper
         self.initialize_type = config['SIMULATION']['initialize_type']

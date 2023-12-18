@@ -35,8 +35,6 @@ class ElasticSolver:
     @ti.func
     def compute_velocity_gradient(self,i):
 
-
-        ##Currently only computes the gradient using snow particles, ie no boundary Eq.17
         grad_v_i_s_prime = ti.Matrix.zero(dt=float, n=3, m=3)
         self.ps.for_all_neighbors(i, self.helper_compute_velocity_gradient_uncorrected, grad_v_i_s_prime)
 
@@ -100,7 +98,7 @@ class ElasticSolver:
         stress_tensor_b_i = self.stress_tensor_pred[i].trace() * ti.Matrix.identity(float, 3) / 3
         sum_fluid = ti.Matrix.zero(float, 3)
         self.ps.for_all_neighbors(i, self.compute_stress_pred_div_fluid_helper, sum_fluid)
-        # sum_b = ti.Matrix.zero(float, 3)
+
         sum_b = ti.Matrix.zero(float, 3)
         self.ps.for_all_b_neighbors(i, self.compute_stress_pred_div_b_helper, sum_b)
         return sum_fluid + stress_tensor_b_i @ sum_b
@@ -110,17 +108,13 @@ class ElasticSolver:
     def compute_stress_pred_div_fluid_helper(self, i, j, sum: ti.template()):
         x_ij = self.ps.position[i] - self.ps.position[j]
         L_i = self.ps.correction_matrix[i]
-        if self.ps.is_pseudo_L_i[i]:
-            L_i = self.ps.pseudo_correction_matrix[i]
         sum += self.stress_tensor_pred[j] @ (-self.get_volume(j) * cubic_kernel_derivative_corrected(-x_ij, self.ps.smoothing_radius, L_i)) + \
             self.stress_tensor_pred[i] @ (self.get_volume(j) * cubic_kernel_derivative_corrected(x_ij, self.ps.smoothing_radius, L_i))
 
     @ti.func
     def compute_stress_pred_div_b_helper(self, i, j, sum: ti.template()):
         x_ij = self.ps.position[i] - self.ps.boundary_particles[j]
-        L_i = self.ps.correction_matrix[i]
-        if self.ps.is_pseudo_L_i[i]:
-            L_i = self.ps.pseudo_correction_matrix[i]        
+        L_i = self.ps.correction_matrix[i]     
         sum += self.ps.boundary_particles_volume[j] * cubic_kernel_derivative_corrected(x_ij, self.ps.smoothing_radius, L_i)
 
     @ti.kernel
@@ -142,9 +136,6 @@ class ElasticSolver:
         grad_v_i_b_prime = ti.Matrix.zero(dt=float, n=3, m=3)
         self.ps.for_all_b_neighbors(i, self.helper_compute_basis_gradient_b_uncorrected, grad_v_i_b_prime)
         L_i = self.ps.correction_matrix[i]
-        if self.ps.is_pseudo_L_i[i]:
-            L_i = self.ps.pseudo_correction_matrix[i]
-        L_i = ti.Matrix.identity(float, 3)
         grad_v_i_tilde = grad_v_i_s_prime @ L_i.transpose() + (grad_v_i_b_prime  @ L_i.transpose()).trace() * ti.Matrix.identity(float, 3) / 3        
         V_i_prime = (grad_v_i_s_prime + grad_v_i_b_prime).trace() * ti.Matrix.identity(float, 3) / 3
         R_i_tilde = (grad_v_i_tilde - grad_v_i_tilde.transpose()) / 2 
@@ -181,8 +172,8 @@ class ElasticSolver:
     def compute_basis_stress_tensor(self, i):
         prod = self.basis_grad[i] @ self.ps.deformation_gradient[i]
         strain = (prod + prod.transpose())
-        if ti.math.isnan(strain).any():
-            print(f"GOT {strain} strain for {i}:prod {self.basis_grad[i]}, stress_div {self.ps.deformation_gradient[i]}")
+        # if ti.math.isnan(strain).any():
+        #     print(f"GOT {strain} strain for {i}:basis grad {self.basis_grad[i]}, deformation grad {self.ps.deformation_gradient[i]}")
         self.basis_stress_tensor[i] = self.ps.G_t_i[i] * (strain)
 
 
@@ -201,17 +192,13 @@ class ElasticSolver:
     def compute_basis_stress_div_fluid_helper(self, i, j, sum: ti.template()):
         x_ij = self.ps.position[i] - self.ps.position[j]
         L_i = self.ps.correction_matrix[i]
-        if self.ps.is_pseudo_L_i[i]:
-            L_i = self.ps.pseudo_correction_matrix[i]
         sum += self.basis_stress_tensor[j] @ (-self.get_volume(j) * cubic_kernel_derivative_corrected(-x_ij, self.ps.smoothing_radius, L_i)) + \
             self.basis_stress_tensor[i] @ (self.get_volume(j) * cubic_kernel_derivative_corrected(x_ij, self.ps.smoothing_radius, L_i))
 
     @ti.func
     def compute_basis_stress_div_b_helper(self, i, j, sum: ti.template()):
         x_ij = self.ps.position[i] - self.ps.boundary_particles[j]
-        L_i = self.ps.correction_matrix[i]
-        if self.ps.is_pseudo_L_i[i]:
-            L_i = self.ps.pseudo_correction_matrix[i]        
+        L_i = self.ps.correction_matrix[i]   
         sum += self.ps.boundary_particles_volume[j] * cubic_kernel_derivative_corrected(x_ij, self.ps.smoothing_radius, L_i)
 
     @ti.kernel

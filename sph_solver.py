@@ -31,6 +31,7 @@ class SnowSolver:
 
         self.time = 0
         self.snow_implemented = True
+        self.verbose_print = self.config.verbose_print
         # self.a_lambda = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         # self.a_G = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
         # self.a_other = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
@@ -45,7 +46,7 @@ class SnowSolver:
         self.gamma_1 = ti.field(float, shape=self.ps.num_particles)
         self.gamma_2 = ti.field(float, shape=self.ps.num_particles)
         self.elastic_solver = ElasticSolver(self.ps)
-        self.pressure_solver = PressureSolver(self.ps)
+        self.pressure_solver = PressureSolver(self.ps, self.numerical_eps, self.verbose_print)
         self.adhesion_model = AdhesionModel(self.ps)
         TAB = " "
         print(f"SPH Initialized with the forces:\n\
@@ -246,8 +247,9 @@ class SnowSolver:
             else:                
                 a_lambda = -1.0 / self.ps.density[i] * self.ps.pressure_gradient[i]
             self.ps.acceleration[i] += a_lambda
-            if i[0] == 0:
-                print(f"Accel Lambda {i}: accel {a_lambda} pressure gradient {self.ps.pressure_gradient[i]}, density {self.ps.density[i]}" )
+            if ti.static(self.verbose_print):
+                if i[0] == 0:
+                    print(f"Accel Lambda {i}: accel {a_lambda} pressure gradient {self.ps.pressure_gradient[i]}, density {self.ps.density[i]}" )
 
     
     @ti.func
@@ -273,6 +275,14 @@ class SnowSolver:
             success = self.pressure_solver.solve(deltaTime)
             self.compute_a_lambda(success)
 
+    @ti.kernel
+    def _accumulate_a_G(self, a_G_ti : ti.template()):
+        for i in ti.grouped(ti.ndrange(self.ps.num_particles)):
+            self.ps.acceleration[i] += a_G_ti[i]
+            if ti.static(self.verbose_print):
+                if i[0] == 0:
+                    print(f"Accel G {i}: accel {a_G_ti[i]}")
+
     def solve_a_G(self, deltaTime):
         
         if self.enable_elastic_solver:
@@ -281,8 +291,7 @@ class SnowSolver:
                 a_G = a_G.reshape([self.ps.num_particles, 3])
                 a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
                 a_G_ti.from_numpy(a_G.astype(np.float32))
-                for i in range(self.ps.num_particles):
-                    self.ps.acceleration[i] += a_G_ti[i]
+                self._accumulate_a_G(a_G_ti)
             else:
                 print("BiCGSTAB failed:", exit_code)
 

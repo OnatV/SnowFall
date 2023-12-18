@@ -6,9 +6,11 @@ from kernels import cubic_kernel, cubic_kernel_derivative
 
 @ti.data_oriented
 class PressureSolver:
-    def __init__(self, ps: ParticleSystem):
+    def __init__(self, ps: ParticleSystem, numerical_epsilon = 1e-5, verbose_print=True):
         self.ps = ps
-        self.numerical_eps = 1e-5
+        self.numerical_eps = numerical_epsilon
+        self.verbose_print = verbose_print
+
 
     @ti.func
     def vel_div(self, i, k, sum:ti.template()):
@@ -42,7 +44,7 @@ class PressureSolver:
         if ti.math.isnan(pi[0]):
             print(f"GOT NAN Pressure {i}: aii {aii}, residuum {residuum}, pi {pi}, pressure {self.ps.pressure[i]}")
             print(f"GOT NAN residuum: {residuum}, A_p: {A_p}, p_star: {self.ps.p_star[i]}, rest_density: {self.ps.rest_density[i]}")
-        density_error += ti.abs(pi)
+        density_error += ti.abs(pi[0])
 
     @ti.func
     def helper_diff_of_pressure_grad(self, i, j, sum:ti.template()):
@@ -74,8 +76,9 @@ class PressureSolver:
             self.ps.for_all_b_neighbors(i, self.helper_Vb, sum_of_b)
             self.ps.pressure_gradient[i] = sum_of_pressures + self.ps.rest_density[i] * self.ps.pressure[i] * sum_of_b
             
-            if i[0] == 0:
-                print(f"Pressure Gradient {i}: fluid pressures {sum_of_pressures}, boundary_term: {self.ps.rest_density[i] * self.ps.pressure[i] * sum_of_b}, boundary volume {sum_of_b}, pressure {self.ps.pressure[i]}")
+            if ti.static(self.verbose_print):
+                if i[0] == 0:
+                    print(f"Pressure Gradient {i}: fluid pressures {sum_of_pressures}, boundary_term: {self.ps.rest_density[i] * self.ps.pressure[i] * sum_of_b}, boundary volume {sum_of_b}, pressure {self.ps.pressure[i]}")
             
 
     @ti.func
@@ -171,9 +174,10 @@ class PressureSolver:
             if it > 1: current_deviation = prev_avg_density_error - avg_density_error
                 
             if it > 2 :
-                if current_deviation < (prev_deviation) * 0.001 :
+                if current_deviation <= (prev_deviation) * 0.001 :
                     is_solved = True
-                    print(f"Took {it} iterations to solve lambda, avg_density_error: {avg_density_error}, prev_avg_density_error: {prev_avg_density_error}, prev_deviation: {prev_deviation}")
+                    if ti.static(self.verbose_print):
+                        print(f"Took {it} iterations to solve lambda, avg_density_error: {avg_density_error}, prev_avg_density_error: {prev_avg_density_error}, prev_deviation: {prev_deviation}")
                     # print("avg_errors", avg_errors)
                 else:
                     is_solved = False
@@ -191,13 +195,16 @@ class PressureSolver:
             # print("pressure_gradient", self.ps.pressure_gradient[0])
             # print("a_lambda", -self.ps.pressure_gradient[0] / self.ps.density[0])
             # print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
+            if it == max_iterations:
+                print("failed to solve with max iters")
+                print("avg_errors", avg_errors)
 
         self.update_pressure_gradient2()
         return is_solved       
 
     @ti.kernel
     def implicit_pressure_solver_step(self, deltaTime:float)->ti.f32:
-        density_error = ti.Vector([0.0])
+        density_error = 0.0
         for i in ti.grouped(self.ps.position):
             self.compute_pressure_gradient(i)
         for i in ti.grouped(self.ps.position):
@@ -212,5 +219,5 @@ class PressureSolver:
         self.implicit_solver_prepare(deltaTime)
         success = self.implicit_pressure_solve(deltaTime)
         if not success:
-            print("failed to solve")
+            print("failed to solve with max iters")
         return success
