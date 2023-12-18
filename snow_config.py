@@ -5,27 +5,6 @@ import json
 # perhaps at some point in the future, we can add a parser to store these as files.
 # see https://github.com/erizmr/SPH_Taichi/blob/master/config_builder.py for similar approach
 class SnowConfig:
-    # def __init__(self,
-    #     num_particles: int = 200,
-    #     gravity: np.array = np.array([0.0, -9.81, 0.0]),
-    #     wind_direction : np.array = np.array([0.0, 0.0, -1.0]),
-    #     domain_size: np.array = np.array([4.0, 4.0, 4.0]), # domain lower corner is at 0,0,0
-    #     deltaTime = 0.001
-    # ) -> None:
-    #     self.num_particles = num_particles
-    #     self.gravity = gravity
-    #     self.domain_size = domain_size
-    #     self.deltaTime = 0.01
-    #     self.wind_direction = wind_direction
-    #     self.smoothing_radius = 0.01
-    #     # self.grid_spacing = 0.01 ##Spacing between grid cells should be close to particle radius
-    #     self.grid_max_particles_per_cell = 100 ##Needed because taichi doesn't support dynamic arrays well, can be decreased if grid spacing is decreased
-
-    #     # values from paper
-    #     self.theta_c = 0.025
-    #     self.theta_s = 0.0075
-
-    #     self.enable_wind = True
     def __init__(self, filepath):
         config = configparser.ConfigParser()
         config.read(filepath)
@@ -35,6 +14,7 @@ class SnowConfig:
         self.theta_c = float(config['PHYSICS']['theta_c'])
         self.theta_s = float(config['PHYSICS']['theta_s'])
         self.init_density = float(config['PHYSICS']['init_density'])
+        self.mass = float(config['PHYSICS']['mass'])
         self.young_mod = float(config['PHYSICS']['young_mod'])
         self.xi = float(config['PHYSICS']['xi'])
         self.nu = float(config['PHYSICS']['nu'])
@@ -48,8 +28,15 @@ class SnowConfig:
         self.particle_radius = float(config['SIMULATION']['particle_radius'])
         self.boundary_particle_radius = float(config['SIMULATION']['boundary_particle_radius'])
         self.smoothing_radius_ratio = float(config['SIMULATION']['smoothing_radius_ratio'])
-        # # self.grid_spacing = 0.01 ##Spacing between grid cells should be close to particle radius
+        self.smoothing_radius = float(config['SIMULATION']['smoothing_radius'])
         self.grid_max_particles_per_cell = int(config['SIMULATION']['max_particles_per_cell']) ##Needed because taichi doesn't support dynamic arrays well, can be decreased if grid spacing is decreased        
+
+        self.enable_wind = bool(config['SIMULATION']['enable_wind'].lower() == "true") 
+        self.enable_adhesion = bool(config['SIMULATION']['enable_adhesion'].lower() == "true") 
+        self.enable_friction = bool(config['SIMULATION']['enable_friction'].lower() == "true") 
+        self.enable_elastic_solver = bool(config['SIMULATION']['enable_elastic_solver'].lower() == "true") 
+        self.enable_compression_solver = bool(config['SIMULATION']['enable_compression_solver'].lower() == "true") 
+
         # # values from paper
         self.initialize_type = config['SIMULATION']['initialize_type']
         self.max_time = float(config['SIMULATION']['max_time'])

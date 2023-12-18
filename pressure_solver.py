@@ -61,6 +61,23 @@ class PressureSolver:
         for i in ti.grouped(self.ps.position):
             self.compute_pressure_gradient(i)
 
+    @ti.kernel
+    def update_pressure_gradient2(self):
+        
+        for i in ti.grouped(self.ps.position):
+            self.ps.pressure_gradient[i] = ti.Vector([0.0, 0.0, 0.0])
+
+            sum_of_pressures = ti.Vector([0.0, 0.0, 0.0])
+            self.ps.for_all_neighbors(i, self.helper_sum_of_pressure, sum_of_pressures)
+
+            sum_of_b = ti.Vector([0.0, 0.0, 0.0])
+            self.ps.for_all_b_neighbors(i, self.helper_Vb, sum_of_b)
+            self.ps.pressure_gradient[i] = sum_of_pressures + self.ps.rest_density[i] * self.ps.pressure[i] * sum_of_b
+            
+            if i[0] == 0:
+                print(f"Pressure Gradient {i}: fluid pressures {sum_of_pressures}, boundary_term: {self.ps.rest_density[i] * self.ps.pressure[i] * sum_of_b}, boundary volume {sum_of_b}, pressure {self.ps.pressure[i]}")
+            
+
     @ti.func
     def compute_pressure_gradient(self, i):
         self.ps.pressure_gradient[i] = ti.Vector([0.0, 0.0, 0.0])
@@ -71,8 +88,7 @@ class PressureSolver:
         sum_of_b = ti.Vector([0.0, 0.0, 0.0])
         self.ps.for_all_b_neighbors(i, self.helper_Vb, sum_of_b)
         self.ps.pressure_gradient[i] = sum_of_pressures + self.ps.rest_density[i] * self.ps.pressure[i] * sum_of_b
-        if i[0] == 0:
-            print(f"Pressure Gradient {i}: fluid pressures {sum_of_pressures}, boundary volume {sum_of_b}, pressure {self.ps.pressure[i]}")
+
 
     @ti.func
     def helper_sum_of_pressure(self, i, j, sum:ti.template()):
@@ -176,7 +192,7 @@ class PressureSolver:
             # print("a_lambda", -self.ps.pressure_gradient[0] / self.ps.density[0])
             # print("pressure_gradient_norm", self.ps.pressure_gradient[0].norm())
 
-        # self.update_pressure_gradient()
+        self.update_pressure_gradient2()
         return is_solved       
 
     @ti.kernel

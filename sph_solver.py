@@ -6,6 +6,7 @@ from taichi.math import vec2, vec3, mat3
 from particle_system import ParticleSystem
 from pressure_solver import PressureSolver
 from adhesion_model import AdhesionModel
+from snow_config import SnowConfig
 from elastic_solver import ElasticSolver, solve as solve_elastic
 from kernels import cubic_kernel, cubic_kernel_derivative
 
@@ -19,8 +20,15 @@ def mult_scalar_matrix(c:float, A: mat3 ):
 
 @ti.data_oriented
 class SnowSolver:
-    def __init__(self, ps: ParticleSystem):
+    def __init__(self, ps: ParticleSystem, cfg: SnowConfig):
         self.ps = ps
+        self.config = cfg
+        self.enable_wind = self.config.enable_wind
+        self.enable_adhesion = self.config.enable_adhesion
+        self.enable_friction = self.config.enable_friction
+        self.enable_elastic_solver = self.config.enable_elastic_solver
+        self.enable_compression_solver = self.config.enable_compression_solver
+
         self.time = 0
         self.snow_implemented = True
         # self.a_lambda = ti.Vector.field(self.dim, dtype=float, shape=self.num_particles)
@@ -33,13 +41,20 @@ class SnowSolver:
         self.h = self.ps.particle_spacing ##Particle Spacing  for friction
         # self.init_kernel_lookup()
         # TO DO: COMPUTE ADAPTIVE CORRECTION FACTORR
+
         self.gamma_1 = ti.field(float, shape=self.ps.num_particles)
         self.gamma_2 = ti.field(float, shape=self.ps.num_particles)
         self.elastic_solver = ElasticSolver(self.ps)
         self.pressure_solver = PressureSolver(self.ps)
-
         self.adhesion_model = AdhesionModel(self.ps)
-
+        TAB = " "
+        print(f"SPH Initialized with the forces:\n\
+              {TAB}Wind Force: {self.enable_wind}\n\
+              {TAB}Adhesion Force: {self.enable_adhesion}\n\
+              {TAB}Friction Force: {self.enable_friction}\n\
+              {TAB}Elastic Solver: {self.enable_elastic_solver}\n\
+              {TAB}Compression Solver: {self.enable_compression_solver}\n\
+                ")
     @ti.func
     def helper_sum_kernel(self, i, j, sum:ti.template()):
         sum += cubic_kernel(
@@ -100,15 +115,15 @@ class SnowSolver:
 
     @ti.kernel
     def compute_boundary_volumes(self):
-        # correction = 0.8
-        correction = 2.5
+        correction = 0.8
+        # correction = 1.0
         for i in range(self.ps.num_b_particles):
             kernel_sum = 0.0
             for j in range(self.ps.num_b_particles):
                 if i == j: continue
                 if (self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm() > self.ps.smoothing_radius: continue
                 kernel_sum += cubic_kernel((self.ps.boundary_particles[i] - self.ps.boundary_particles[j]).norm(), self.ps.smoothing_radius)
-            # self.ps.boundary_particles_volume[i] = 0.8 * self.ps.boundary_particle_radius ** 3 * (1.0 / kernel_sum)
+
             self.ps.boundary_particles_volume[i] =  correction * (1.0 / kernel_sum)
             
 
@@ -219,23 +234,21 @@ class SnowSolver:
     #calculate V_i = m_i / density_i
     @ti.func
     def get_volume(self, i):
-        return (self.ps.m_k / ti.math.max(self.ps.init_density, self.numerical_eps ) )
+        return (self.ps.m_k / ti.math.max(self.ps.density[i], self.numerical_eps ) )
 
   
     @ti.kernel
     def compute_a_lambda(self, success : ti.template()):
         for i in ti.grouped(self.ps.position):
             a_lambda = ti.Vector([0.0, 0.0, 0.0])
-            if not success or \
-            ti.math.isnan(self.ps.rest_density[i]) or \
-            ti.math.isnan(self.ps.pressure[i]) or \
-            self.ps.rest_density[i] == 0.0:
+            if not success:
                 a_lambda = ti.Vector([0.0, 0.0, 0.0])
             else:                
                 a_lambda = -1.0 / self.ps.density[i] * self.ps.pressure_gradient[i]
             self.ps.acceleration[i] += a_lambda
             if i[0] == 0:
                 print(f"Accel Lambda {i}: accel {a_lambda} pressure gradient {self.ps.pressure_gradient[i]}, density {self.ps.density[i]}" )
+
     
     @ti.func
     def nan_check(self) -> bool:
@@ -256,21 +269,22 @@ class SnowSolver:
             Computes Step 6 in Algorithm 1 in the paper.
 
         '''
-        
-        success = self.pressure_solver.solve(deltaTime)
-        self.compute_a_lambda(success)
+        if self.enable_compression_solver:
+            success = self.pressure_solver.solve(deltaTime)
+            self.compute_a_lambda(success)
 
     def solve_a_G(self, deltaTime):
         
-        a_G, exit_code = solve_elastic(self.elastic_solver, deltaTime)
-        if exit_code >= 0:
-            a_G = a_G.reshape([self.ps.num_particles, 3])
-            a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
-            a_G_ti.from_numpy(a_G.astype(np.float32))
-            for i in range(self.ps.num_particles):
-                self.ps.acceleration[i] += a_G_ti[i]
-        else:
-            print("BiCGSTAB failed:", exit_code)
+        if self.enable_elastic_solver:
+            a_G, exit_code = solve_elastic(self.elastic_solver, deltaTime)
+            if exit_code >= 0:
+                a_G = a_G.reshape([self.ps.num_particles, 3])
+                a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
+                a_G_ti.from_numpy(a_G.astype(np.float32))
+                for i in range(self.ps.num_particles):
+                    self.ps.acceleration[i] += a_G_ti[i]
+            else:
+                print("BiCGSTAB failed:", exit_code)
 
     @ti.func
     def aux_correction_matrix(self, i_idx, j_idx, res:ti.template()):
@@ -328,11 +342,12 @@ class SnowSolver:
 
         ##Wind Strength equal to the position of the particle in the direction
         wind_acc = ti.Vector([0.0, 0.0, 0.0])
-        if ti.static(self.wind_enabled):
+        if ti.static(self.enable_wind):
             wind_acc += self.ps.wind_direction * self.ps.position[i].dot(self.ps.wind_direction)
 
         self.ps.acceleration[i] = self.ps.gravity + wind_acc
-        self.compute_adhesion(i)
+        if ti.static(self.enable_adhesion):
+            self.compute_adhesion(i)
 
     @ti.func
     def compute_adhesion(self,i):
@@ -477,7 +492,8 @@ class SnowSolver:
                     Step 5 : self.compute_accel_friction(i)
         '''
         for i in ti.grouped(self.ps.position):
-            self.compute_accel_friction(i, deltaTime) #Step 5
+            if ti.static(self.enable_friction):
+                self.compute_accel_friction(i, deltaTime) #Step 5
 
     @ti.kernel
     def integrate_deformation_gradient(self, deltaTime:float):
@@ -576,10 +592,11 @@ class SnowSolver:
             self.compute_lambda(deltaTime) # Step 1, includes Steps 2-3
             self.compute_kernel_correction_matrix(deltaTime) # Step 1, includes Steps 2-3
             self.compute_external_forces(deltaTime) # Step 4
-            # self.compute_friction_forces(deltaTime) # Step 5
+            self.compute_friction_forces(deltaTime) # Step 5
+
             # print("before solve a")
             self.solve_a_lambda(deltaTime) # Step 6
-            # self.solve_a_G(deltaTime)             #Step 7 
+            self.solve_a_G(deltaTime)             #Step 7 
             self.integrate_velocity(deltaTime) # Step 8-9
             self.integrate_deformation_gradient(deltaTime) #Step 10-11
 

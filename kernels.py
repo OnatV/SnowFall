@@ -10,7 +10,7 @@ def cubic_kernel(r_norm, h) -> ti.f32:
     k = 8 / np.pi
     k /= ti.pow(h, 3)
     q = r_norm / h
-    
+
     if q <= 1.0:
         if q <= 0.5:
             q2 = ti.pow(q, 2)

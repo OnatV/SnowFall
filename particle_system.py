@@ -23,11 +23,12 @@ class ParticleSystem:
         self.init_density = self.cfg.init_density
         self.gravity = ti.Vector(self.cfg.gravity)
         self.temperature = -10.0 # degrees Celsuis
-        self.m_k = np.pi * float(4/3) * (self.particle_radius ** self.dim) * self.init_density # particle mass
+        # self.m_k = ti.math.pi * float(4/3) * (self.particle_radius ** self.dim) * self.init_density # particle mass
+        self.m_k = self.cfg.mass
         self.particle_spacing = self.cfg.particle_spacing
         self.boundary_particle_spacing = self.cfg.boundary_particle_spacing
         # self.m_k = 0.008
-        self.smoothing_radius = self.cfg.smoothing_radius_ratio * self.particle_spacing
+        self.smoothing_radius = self.cfg.smoothing_radius
 
         self.wind_direction = ti.Vector(self.cfg.wind_direction)
         self.enable_wind = False
@@ -95,9 +96,8 @@ class ParticleSystem:
             self.fluid_grid = FluidGrid(self.domain_start, self.domain_end, self.smoothing_radius)
             self.b_grid = FluidGrid(self.domain_start, self.domain_end, self.smoothing_radius)
 
-
         self.padding = 0.1 * self.grid_spacing
-        # self.boundary_particle_spacing = self.boundary_particle_radius # important quantity for figuring out boundary volume
+
         # if self.object_paths is not None:
         self.import_boundary_objects()
         
@@ -190,7 +190,6 @@ class ParticleSystem:
     def initialize_boundary_particle_block(self, len_x:float, len_y:float, len_z:float, origin:ti.template()):
         print("Boundary Block length", len_x)
         # block_position = origin
-        # positions = ti.Vector.field(3, dtype=float, shape=int(len_x / self.particle_radius) * int(len_z / self.particle_radius) * int(len_y / self.particle_radius))
         print((int(len_x / self.boundary_particle_spacing)), int(len_y / self.boundary_particle_spacing), int(len_z / self.boundary_particle_spacing))
 
         for i in range(int(len_x / self.boundary_particle_spacing)):

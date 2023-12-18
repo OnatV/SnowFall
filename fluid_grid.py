@@ -180,7 +180,7 @@ class FakeGrid:
         ###Iterate over all neighbours of grid cell i
 
         for j in ti.grouped(ti.ndrange( positions.shape[0] ) ):
-            if (positions[i] - positions[j[0]]).norm_sqr() <= h*h:
+            if (positions[i] - positions[j[0]]).norm() <= h and (i[0] != j[0]):
                 func(i, j, ret)
     
     @ti.func
@@ -189,7 +189,7 @@ class FakeGrid:
             to be used for computing boundary particles contributing to fluid particless
         '''
         for j in ti.grouped(ti.ndrange( b_positions.shape[0] ) ):
-            if (position - b_positions[j]).norm_sqr() <= h*h:
+            if (position - b_positions[j]).norm() <= h:
                 func(i, j, ret)
 
     @ti.func

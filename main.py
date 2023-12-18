@@ -23,7 +23,7 @@ if __name__ =='__main__':
     # print_about()
     cfg = SnowConfig(args.config)
     ps = ParticleSystem(cfg)
-    snow_solver = SnowSolver(ps)
+    snow_solver = SnowSolver(ps,cfg)
     sim_is_running = False
     sim_time = 0.0
     last_log_time = 0.0
