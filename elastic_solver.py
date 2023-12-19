@@ -24,6 +24,7 @@ class ElasticSolver:
         self.basis_stress_tensor = ti.Matrix.field(m=self.ps.dim, n=self.ps.dim, dtype=float, shape=self.ps.num_particles)
 
         self.a_G_ti = ti.Vector.field(self.ps.dim, dtype=float, shape=self.ps.num_particles)
+        self.a_G_ti_new = ti.field(dtype=float, shape=(self.ps.num_particles,3))
         self.deltaTime = 0.1
 
     @ti.kernel
@@ -229,15 +230,27 @@ class ElasticSolver:
             self.lhs[i] = self.basis_vec[i] - (self.deltaTime / self.ps.density[i]) * stress_div
             if ti.math.isnan(self.lhs[i]).any():
                 print(f"GOT {self.lhs[i]} lhs for {i}:basis_vec {self.basis_vec[i]}, stress_div {stress_div}")
+
+    @ti.kernel
+    def reset_aG(self):
+        for i in ti.grouped(self.ps.position):
+            self.a_G_ti[i] = ti.Vector.zero(float, self.ps.dim)
+            self.a_G_ti_new[i] = ti.zero(float, 3)
     
 @ti.data_oriented
 class MyLinearOperator(LinearOperator):
     def __init__(self, es:ElasticSolver):
         super().__init__(shape=(es.ps.num_particles, es.ps.num_particles), dtype=float)
         self.es = es
+        
 
     @ti.kernel
     def _matvec(self, x:ti.template(), Ax:ti.template()):
+        
+        for i in ti.grouped(self.es.ps.position):
+            self.es.basis_vec[i].x = x[i,0]
+            self.es.basis_vec[i].y = x[i,1]
+            self.es.basis_vec[i].z = x[i,2]
 
         for i in ti.grouped(self.es.ps.position):
             self.es.basis_grad[i] = self.es.compute_basis_gradient(i)
@@ -250,7 +263,13 @@ class MyLinearOperator(LinearOperator):
             if ti.math.isnan(self.es.lhs[i]).any():
                 print(f"GOT {self.es.lhs[i]} lhs for {i}:basis_vec {self.es.basis_vec[i]}, stress_div {stress_div}")
 
-        x = self.es.a_G_ti
+        for i in ti.grouped(self.es.ps.position):
+            Ax[i,0] = self.es.lhs[i].x
+            Ax[i,1] = self.es.lhs[i].y
+            Ax[i,2] = self.es.lhs[i].z
+
+
+
 
 # this is the linear operator that scipy will use to solve the Bi-CGSTAB
 # this function will need to set the basis vector
@@ -268,21 +287,31 @@ def solve_numpy(es: ElasticSolver, dt:float):
     x0 = es.a_G_ti.to_numpy().reshape([3 * es.ps.num_particles,])
     A = LinearOperator(shape=(3 * es.ps.num_particles, 3 * es.ps.num_particles), matvec=lambda x: linop_numpy(x, es))
     
-    a_G, exit_code =  bicgstab(A=A, b=b, x0 = x0, maxiter=5000, tol=1e-6)
+    a_G, exit_code =  bicgstab(A=A, b=b, x0= x0, maxiter=5000, tol=1e-5)
     if exit_code >= 0:
         a_G = a_G.reshape([es.ps.num_particles, 3])
         es.a_G_ti.from_numpy(a_G.astype(np.float32))
     else:
         print("BiCGSTAB failed:", exit_code)
+        print(f"RHS {b}")
+        # raise ValueError("BiCGSTAB failed")
+        es.reset_aG()
 
     return exit_code
-    
+@ti.kernel
+def init_new_field(new_field : ti.template(), old_field : ti.template()):
+    for i, j in new_field:
+        new_field[i, 0] = old_field[i].x
+        new_field[i, 1] = old_field[i].y
+        new_field[i, 2] = old_field[i].z
+
 def solve_taichi(es:ElasticSolver, dt:float):
     es.deltaTime = dt
     A = MyLinearOperator(es)
-    b = es.rhs
-    res = ti.linalg.MatrixFreeBICGSTAB(A, b, es.a_G_ti, tol=1e-06, maxiter=5000, quiet=True)
-    print(f"new solver:", res)
+    b = ti.field(ti.f32, shape=(es.ps.num_particles, 3))
+    init_new_field(b, es.rhs)
+    res = ti.linalg.MatrixFreeBICGSTAB(A, b, es.a_G_ti_new, tol=1e-06, maxiter=5000, quiet=false)
+    return (res * 1)
 
 
 

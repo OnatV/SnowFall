@@ -174,7 +174,7 @@ class PressureSolver:
             if it > 1: current_deviation = prev_avg_density_error - avg_density_error
                 
             if it > 2 :
-                if current_deviation <= (prev_deviation) * 0.001 :
+                if (current_deviation <= (prev_deviation) * 0.001) or (current_deviation <= self.numerical_eps) :
                     is_solved = True
                     if ti.static(self.verbose_print):
                         print(f"Took {it} iterations to solve lambda, avg_density_error: {avg_density_error}, prev_avg_density_error: {prev_avg_density_error}, prev_deviation: {prev_deviation}")

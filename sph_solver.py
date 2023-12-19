@@ -7,7 +7,7 @@ from particle_system import ParticleSystem
 from pressure_solver import PressureSolver
 from adhesion_model import AdhesionModel
 from snow_config import SnowConfig
-from elastic_solver import ElasticSolver, solve_numpy as solve_elastic
+from elastic_solver import ElasticSolver, solve_taichi as solve_elastic
 from kernels import cubic_kernel, cubic_kernel_derivative
 
 @ti.func
