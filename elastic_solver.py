@@ -299,18 +299,28 @@ def solve_numpy(es: ElasticSolver, dt:float):
 
     return exit_code
 @ti.kernel
-def init_new_field(new_field : ti.template(), old_field : ti.template()):
+def init_new_scalar_field(new_field : ti.template(), old_field : ti.template()):
     for i, j in new_field:
         new_field[i, 0] = old_field[i].x
         new_field[i, 1] = old_field[i].y
         new_field[i, 2] = old_field[i].z
 
+@ti.kernel
+def init_new_vector_field(new_field : ti.template(), old_field : ti.template()):
+    for i, j in old_field:
+      new_field[i].x =   old_field[i, 0] 
+      new_field[i].y =   old_field[i, 1] 
+      new_field[i].z =   old_field[i, 2] 
+
 def solve_taichi(es:ElasticSolver, dt:float):
     es.deltaTime = dt
+    es.compute_rhs()
     A = MyLinearOperator(es)
     b = ti.field(ti.f32, shape=(es.ps.num_particles, 3))
-    init_new_field(b, es.rhs)
-    res = ti.linalg.MatrixFreeBICGSTAB(A, b, es.a_G_ti_new, tol=1e-06, maxiter=5000, quiet=false)
+    init_new_scalar_field(b, es.rhs)
+    res = ti.linalg.MatrixFreeBICGSTAB(A, b, es.a_G_ti_new, tol=1e-06, maxiter=5000, quiet=False)
+    if res:
+        init_new_vector_field(es.a_G_ti, es.a_G_ti_new)
     return (res * 1)
 
 
