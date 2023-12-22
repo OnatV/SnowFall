@@ -146,7 +146,10 @@ class SnowSolver:
 
         for i in range(self.ps.num_particles):
             self.ps.velocity[i] = self.ps.velocity[i] + (deltaTime * self.ps.acceleration[i])
-            # self.ps.velocity[i] = self.ps.velocity[i] / self.ps.velocity[i].norm()
+            # ridiculous damping:
+            # self.ps.velocity[i].y = ti.min(self.ps.velocity[i].y ,0.0)
+            # self.ps.velocity[i].x = 0.0
+            # self.ps.velocity[i].z = 0.0
     @ti.kernel
     def update_position(self, deltaTime: float):
         for i in range(self.ps.num_particles):
@@ -260,7 +263,7 @@ class SnowSolver:
             a_G = a_G.reshape([self.ps.num_particles, 3])
             self.a_G_ti.from_numpy(a_G.astype(np.float32))
             for i in range(self.ps.num_particles):
-                self.ps.acceleration[i] += self.a_G_ti[i]
+                self.ps.acceleration[i] += 100.0 * self.a_G_ti[i]
         else:
             print("BiCGSTAB failed:", exit_code)
 
@@ -507,7 +510,7 @@ class SnowSolver:
             self.compute_internal_forces(deltaTime) # Step 1, includes Steps 2-5
             # print("before solve a")
             self.solve_a_lambda(deltaTime) # Step 6
-            self.solve_a_G(deltaTime)             #Step 7 
+            # self.solve_a_G(deltaTime)             #Step 7 
             self.integrate_velocity(deltaTime) # Step 8-9
             self.integrate_deformation_gradient(deltaTime) #Step 10-11
 
@@ -535,8 +538,8 @@ class SnowSolver:
         # enforce the boundary of the domain (and later rigid bodies)
         self.enforce_boundary_3D()
         ta = perf_counter_ns()
-        col = ti.Vector([1.0, 0.0, 0.0])
-        self.ps.color_neighbors(0, col)
+        # col = ti.Vector([1.0, 0.0, 0.0])
+        # self.ps.color_neighbors(0, col)
         te = perf_counter_ns()
         print(f"time {(te - ta) / 1e6} ms")
         # self.ps.color_neighbors(9, ti.Vector([0.0, 1.0, 0.0]))
@@ -546,7 +549,7 @@ class SnowSolver:
         # self.ps.color_neighbors(900, ti.Vector([0.5, 0.5, 1.0]))
         # self.ps.color_neighbors(990, ti.Vector([0.0, 1.0, 1.0]))
         # self.ps.color_neighbors(999, ti.Vector([1.0, 0.0, 0.5]))
-        self.ps.color_b_neighbors(0, ti.Vector([1.0, 0.0, 1.0]))
+        # self.ps.color_b_neighbors(0, ti.Vector([1.0, 0.0, 1.0]))
         # update time
         self.time += deltaTime
         # print(self.ps.position[0])

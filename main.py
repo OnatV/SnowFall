@@ -62,11 +62,12 @@ if __name__ =='__main__':
             if sim_is_running:
                 if time.time() - current_time > 5 * logger.log_time_step:
                     print("Time:", current_time)
-                    logger.replay_step(time.time())
-                    if logger.current_step >= logger.num_time_steps:
+                    if logger.current_step >= logger.num_time_steps - 1:
                         print("finished!")
-                        sim_is_running = False                        
+                        sim_is_running = False
+                        continue                
                     current_time = time.time()
+                    logger.replay_step(time.time())
             ps.visualize()
 
     snow_pos = ps.position.to_numpy()

@@ -76,4 +76,5 @@ class Logger:
     def replay_step(self, time):
         pos = self.file['position'][:, self.current_step].reshape([self.ps.num_particles, 3])
         self.ps.position.from_numpy(pos)
-        self.current_step += 1
+        if not self.current_step + 1 >= self.num_time_steps:
+            self.current_step += 1

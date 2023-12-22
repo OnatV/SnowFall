@@ -10,6 +10,8 @@ bl_info ={
     "category":"Object",
 }
 
+## the material was borrowed from Blender's official "RealSnow" addon
+
 import bpy
 import bmesh
 from bpy.props import BoolProperty, FloatProperty, IntProperty, PointerProperty, StringProperty

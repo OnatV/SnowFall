@@ -1,14 +1,21 @@
 # SnowFall
 - Run via
     ```
-    python main.py
+    python main.py --config (file_name)
+    # example:
+    python main.py --config configs/snow_brick.ini
     ```
 
 ## dependencies
-- taichi
-- numpy
-- h5py
-- configparser
+ - numpy
+ - taichi
+ - configparser
+ - h5py
+ - argparse
+ - scikit-learn
+ - mesh-to-sdf
+ - scipy
+ - trimesh
 
 ### Why hdf5 format for logging?
 `hdf5` is a dataset format that works well for large datasets. If at some point we want to save long simulations with lots of particles, this file format is extremely useful.
@@ -31,12 +38,12 @@ please run `pip install h5py` to use this!
 ### Milestones
 1. ~~Set up programming environment (including choice of language + libraries) (Oct 31 - Nov 7)~~
 2. ~~Create simple render + viewport to enable visual debugging (Oct 31 - Nov 7)~~
-3. Implement SPH to support minimal target (Nov 7th - 21st) 
-4. Show compression of snow due to cube (Nov 21st - Nov 28th)
-Midterm Presentation (28th Nov)
-5. Implement adhesion and friction with cube (Nov 28th - Dec 5th)
-6. Physics working with arbitrary mesh (Dec 5th - Dec 12th)
-7. Rendering + Performance (Dec 12th - Dec 19th)
+3. ~~Implement SPH to support minimal target (Nov 7th - 21st) ~~
+4. ~~ Show compression of snow due to cube (Nov 21st - Nov 28th)~~
+~~Midterm Presentation (28th Nov)~~
+5. ~~Implement adhesion and friction with cube (Nov 28th - Dec 5th)~~
+6. ~~Physics working with arbitrary mesh (Dec 5th - Dec 12th)~~
+7. ~~Rendering + Performance (Dec 12th - Dec 19th)~~
 Deadline (Dec 19th)
 
 
@@ -80,10 +87,9 @@ This pseudocode is already layed out in [SnowSolver.substep](sph_solver.py)
     - ~~compute rest density - Livio~~
     - ~~compute correction matrix - Livio~~
     - ~~compute a_other (ignoring boundary effects) - Livio~~
-    - solver for elastic deformation - Jackson
+    - ~~solver for elastic deformation~~ - Jackson
         - ~~solve a^lambda : almost done~~
-    - solver for plastic deformation
-        - solve a_G: future work
+    - ~~solver for plastic deformation~~ - Jackson
     - ~~integrate deformation gradient - Onat~~
     - ~~Grid for performance - Onat -> Partly done ???~~
     - ~~fixing the camera lookat - Jackson~~
@@ -92,9 +98,9 @@ This pseudocode is already layed out in [SnowSolver.substep](sph_solver.py)
     - compute a_friction
 - Nice to have:
     - ~~saving to output~~
-    - Config parser
-    - Skybox/shading : Jackson
-- ~~Logger~~
+    - ~~Config parser~~
+    - ~~Skybox/shading~~ : Jackson
+- ~~Logger~~ - Jackson
 - 
 
 ## Sources

@@ -173,4 +173,5 @@ profiling/
 *.hdf5
 
 *.blend
+*.blend1
 *.ply
